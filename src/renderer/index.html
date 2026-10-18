@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'" />
+<title>MDX</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="toolbar" id="toolbar">
+    <div class="tb-group brand"><span class="logo">MDX</span></div>
+
+    <div class="tb-group">
+      <button class="tb" data-cmd="cmd:new"     title="新建 (Ctrl+N)">📄</button>
+      <button class="tb" data-cmd="cmd:open"    title="打开 (Ctrl+O)">📂</button>
+      <button class="tb" data-cmd="cmd:save"    title="保存 (Ctrl+S)">💾</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="tb-group">
+      <button class="tb" data-cmd="fmt:h1" title="标题 1">H1</button>
+      <button class="tb" data-cmd="fmt:h2" title="标题 2">H2</button>
+      <button class="tb" data-cmd="fmt:h3" title="标题 3">H3</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="tb-group">
+      <button class="tb" data-cmd="fmt:bold"    title="粗体 (Ctrl+B)"><b>B</b></button>
+      <button class="tb" data-cmd="fmt:italic"  title="斜体 (Ctrl+I)"><i>I</i></button>
+      <button class="tb" data-cmd="fmt:strike"  title="删除线"><s>S</s></button>
+      <button class="tb" data-cmd="fmt:code"    title="行内代码 (Ctrl+E)">&lt;/&gt;</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="tb-group">
+      <button class="tb" data-cmd="ins:table"  title="插入表格 (Ctrl+T)">▦</button>
+      <button class="tb" data-cmd="ins:quote"  title="插入引用">❝</button>
+      <button class="tb" data-cmd="ins:code"   title="代码块">❮❯</button>
+      <button class="tb" data-cmd="ins:ul"     title="无序列表">•</button>
+      <button class="tb" data-cmd="ins:ol"     title="有序列表">1.</button>
+      <button class="tb" data-cmd="ins:todo"   title="任务列表">☑</button>
+      <button class="tb" data-cmd="ins:hr"     title="分隔线">—</button>
+      <button class="tb" data-cmd="ins:link"   title="链接">🔗</button>
+      <button class="tb" data-cmd="ins:image"  title="图片">🖼</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="tb-group">
+      <button class="tb seg active" data-view="edit"    title="仅编辑 (Ctrl+1)">✎</button>
+      <button class="tb seg" data-view="split"   title="分栏 (Ctrl+2)">◫</button>
+      <button class="tb seg" data-view="preview" title="仅预览 (Ctrl+3)">👁</button>
+    </div>
+
+    <div class="spacer"></div>
+    <button class="tb" id="btnTheme" title="深色模式 (Ctrl+D)">◐</button>
+  </header>
+
+  <main class="panes" id="panes" data-mode="split">
+    <section class="pane pane-edit" id="paneEdit">
+      <div class="pane-head"><span id="fileName">未命名.md</span></div>
+      <div id="editor"></div>
+    </section>
+    <div class="divider" id="divider"></div>
+    <section class="pane pane-view" id="paneView">
+      <div class="pane-head"><span>预览</span></div>
+      <article class="markdown-body" id="preview"></article>
+    </section>
+  </main>
+
+  <footer class="statusbar" id="statusbar">
+    <span id="stPath">—</span>
+    <span class="spacer"></span>
+    <span id="stSaved">已保存</span>
+    <span id="stWords">0 字</span>
+    <span id="stLines">0 行</span>
+  </footer>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.bundle.js"></script>
+</body>
+</html>
