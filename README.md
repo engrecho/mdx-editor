@@ -285,7 +285,14 @@ npm run gen:icons     # 重新生成全套图标
 
 ---
 
-## 八、反馈
+## 八、平台安装说明
+
+- Windows：[`docs/Windows使用说明.md`](docs/Windows使用说明.md)
+- macOS：[`docs/macOS使用说明.md`](docs/macOS使用说明.md)
+
+---
+
+## 九、反馈
 
 发现问题或想要新功能，欢迎到
 [GitHub 仓库](https://github.com/engrecho/qingmo) 提 Issue。
