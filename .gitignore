@@ -2,6 +2,7 @@
 node_modules/
 dist/
 dist-out/
+out-*/
 build-output/
 .cache/
 _archive/

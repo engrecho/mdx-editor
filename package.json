@@ -1,6 +1,6 @@
 {
   "name": "qingmo",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "轻墨 QingMo — 简洁轻量的跨平台 Markdown 编辑器",
   "main": "src/main/main.js",
   "author": "王君龙",
@@ -39,7 +39,7 @@
     "appId": "cn.bajiaolu.qingmo",
     "productName": "轻墨",
     "directories": {
-      "output": "dist-out"
+      "output": "build-output"
     },
     "files": [
       "src/main/**/*",
