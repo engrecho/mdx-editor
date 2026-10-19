@@ -14,7 +14,7 @@ const log = (...a) => console.error(util.format(...a));
 const VER = process.argv[2] ||
   JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'))
     .devDependencies.electron.replace(/[\^~]/g, '');
-const CACHE = path.join(__dirname, '..', '..', '..', 'mdxbuild');
+const CACHE = path.join(__dirname, '..', '..', '..', '..', 'mdxbuild'); // 可改为项目内 .cache
 const ARCHES = ['arm64', 'x64'];
 const MIRRORS = [
   'https://npmmirror.com/mirrors/electron/',

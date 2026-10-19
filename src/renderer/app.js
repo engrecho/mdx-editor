@@ -12,47 +12,51 @@ import { tags as t } from '@lezer/highlight';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
-const DEFAULT_DOC = `# MDX
+const DEFAULT_DOC = `# 欢迎使用轻墨
 
-欢迎使用 **MDX** —— 一个简洁轻量的 Markdown 编辑器。
+**轻墨** 是一个简洁轻量的 Markdown 编辑器。左边写，右边即时看到成品。
 
-## 特性
+## 快速上手
 
-- 左侧编辑，右侧**实时预览**
-- 一键插入表格、引用、代码块、任务列表
-- 快捷键全覆盖（Ctrl/Cmd + 组合键）
-- 深色模式，跨平台（Windows / macOS）
-- 文档自动暂存，关机不丢
+| 想做什么 | 怎么做 |
+| --- | --- |
+| 保存 | Ctrl+S |
+| 插入表格 | Ctrl+T |
+| 插入引用 | Ctrl+Shift+Q |
+| 切换视图 | Ctrl+1 / 2 / 3 |
+| 深色模式 | Ctrl+D |
 
 ## 表格
 
+选中若干行再按 Ctrl+T，首行自动作表头：
+
 | 功能 | 快捷键 | 说明 |
 | --- | --- | --- |
-| 保存 | Ctrl+S | 保存当前文档 |
-| 表格 | Ctrl+T | 插入 3x3 表格 |
-| 引用 | Ctrl+Shift+Q | 插入引用块 |
-| 分栏 | Ctrl+2 | 编辑 + 预览分栏 |
+| 加粗 | Ctrl+B | 选中文字后按，再次按下取消 |
+| 插入表格 | Ctrl+T | 无选区时插入空白表格 |
+| 导出 HTML | Ctrl+Shift+E | 生成带样式的独立网页 |
 
 ## 代码
 
 \`\`\`js
 function hello(name) {
-  return \`Hello, \${name}\!\`;
+  return \`你好，\${name}\`;
 }
 \`\`\`
 
 ## 引用
 
-> 简洁不等于简陋。
 > 好工具应该让人忘记它的存在。
+> 你只管写，格式交给它。
 
-- [x] 支持实时预览
-- [x] 支持快捷插入
-- [ ] 支持自定义主题（后续）
+- [x] 实时预览
+- [x] 快捷插入表格 / 引用 / 列表
+- [x] 深色模式
+- [ ] 自定义主题（计划中）
 
 ---
 
-*左下角显示字数统计，右下角切换深色模式。*
+*试试拖动中间的分隔线，或按 Ctrl+3 只看预览。*
 `;
 
 /* ============ Editor 初始化 ============ */

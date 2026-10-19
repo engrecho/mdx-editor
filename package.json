@@ -1,7 +1,7 @@
 {
-  "name": "mdx-editor",
-  "version": "1.0.0",
-  "description": "简洁轻量的 Markdown 编辑器，支持实时预览与快捷插入",
+  "name": "qingmo",
+  "version": "1.1.0",
+  "description": "轻墨 QingMo — 简洁轻量的跨平台 Markdown 编辑器",
   "main": "src/main/main.js",
   "author": "王君龙",
   "license": "MIT",
@@ -34,10 +34,10 @@
     "marked": "^14.0.0"
   },
   "build": {
-    "appId": "cn.bajiaolu.mdx",
-    "productName": "MDX",
+    "appId": "cn.bajiaolu.qingmo",
+    "productName": "轻墨",
     "directories": {
-      "output": "release-v2"
+      "output": "build-output"
     },
     "files": [
       "src/main/**/*",
@@ -61,7 +61,12 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "MDX"
+      "shortcutName": "轻墨",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052"
     }
-  }
+  },
+  "productName": "轻墨"
 }

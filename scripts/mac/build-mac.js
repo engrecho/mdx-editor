@@ -68,7 +68,7 @@ fs.writeFileSync(path.join(appStage, 'package.json'), JSON.stringify({
 log('OK 资源暂存于 %s', path.basename(appStage));
 
 /* ---------- 2. 逐架构组装 ---------- */
-const outDir = path.join(SRC, 'release-v2', 'mac');
+const outDir = path.join(SRC, 'build-output', 'mac');
 fs.mkdirSync(outDir, { recursive: true });
 
 for (const arch of ARCHES) {
@@ -89,8 +89,12 @@ for (const arch of ARCHES) {
   if (!appName) { log('X 未找到 .app: %s', entries.join(',')); continue; }
 
   const srcApp = path.join(work, appName);
-  const newApp = path.join(work, 'MDX.app');
-  if (appName !== 'MDX.app') fs.renameSync(srcApp, newApp);
+  // .app 目录名与可执行文件名用 ASCII「QingMo」——mac 惯例，且避免非 ASCII
+  // 名在部分系统调用下的兼容问题。用户可见的名称走 Info.plist 里的中文。
+  const APP_DIR = 'QingMo.app';
+  const BIN_NAME = 'QingMo';
+  const newApp = path.join(work, APP_DIR);
+  if (appName !== APP_DIR) fs.renameSync(srcApp, newApp);
 
   const macRes = path.join(newApp, 'Contents', 'Resources');
   const macBin = path.join(newApp, 'Contents', 'MacOS');
@@ -104,14 +108,14 @@ for (const arch of ARCHES) {
   asarCreate(appStage, path.join(macRes, 'app.asar'));
   log('  app.asar = %s KB', (fs.statSync(path.join(macRes, 'app.asar')).size / 1024).toFixed(0));
 
-  // 改可执行文件名为 MDX
+  // 改可执行文件名
   const bins = fs.readdirSync(macBin).filter(f => !f.endsWith('.__x'));
-  if (!bins.includes('MDX') && bins.length) {
-    fs.renameSync(path.join(macBin, bins[0]), path.join(macBin, 'MDX'));
-    log('  可执行: %s -> MDX', bins[0]);
+  if (!bins.includes(BIN_NAME) && bins.length) {
+    fs.renameSync(path.join(macBin, bins[0]), path.join(macBin, BIN_NAME));
+    log('  可执行: %s -> %s', bins[0], BIN_NAME);
   }
 
-  // 改 Info.plist
+  // 改 Info.plist：内部标识用 ASCII，用户可见名用中文
   const plistPath = path.join(newApp, 'Contents', 'Info.plist');
   let plist = fs.readFileSync(plistPath, 'utf-8');
   let changed = 0;
@@ -119,10 +123,11 @@ for (const arch of ARCHES) {
     const re = new RegExp('(<key>' + key + '</key>\\s*<string>)[^<]*(</string>)');
     if (re.test(plist)) { plist = plist.replace(re, '$1' + val + '$2'); changed++; }
   };
-  setKey('CFBundleName', 'MDX');
-  setKey('CFBundleDisplayName', 'MDX');
-  setKey('CFBundleExecutable', 'MDX');
-  setKey('CFBundleIdentifier', 'cn.bajiaolu.mdx');
+  const APP_CN = '轻墨';
+  setKey('CFBundleName', APP_CN);                    // 菜单栏 / 默认显示
+  setKey('CFBundleDisplayName', APP_CN);             // 访达显示名
+  setKey('CFBundleExecutable', BIN_NAME);            // 必须与实际可执行文件名一致
+  setKey('CFBundleIdentifier', 'cn.bajiaolu.qingmo');
   setKey('CFBundleShortVersionString', pkg.version);
   setKey('CFBundleVersion', pkg.version);
   setKey('CFBundleGetInfoString', pkg.description);
@@ -142,7 +147,8 @@ for (const arch of ARCHES) {
   log('  已清理权限标记');
 
   // 压缩
-  const outZip = path.join(outDir, 'MDX-' + pkg.version + '-mac-' + arch + '.zip');
+  // 产物文件名用 ASCII，避免跨平台传输时中文文件名带来的兼容问题
+  const outZip = path.join(outDir, `QingMo-${pkg.version}-mac-${arch}.zip`);
   try { fs.unlinkSync(outZip); } catch (e) {}
   log('压缩打包...');
   execFileSync(NODE_BIN, [path.join(__dirname, 'zip.js'), newApp, outZip],

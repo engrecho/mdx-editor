@@ -1,142 +1,252 @@
-# MDX — Markdown 编辑器
+# 轻墨 QingMo
 
-简洁轻量的跨平台 Markdown 编辑器，左侧编辑、右侧实时预览，支持快捷插入表格 / 引用 / 代码块等语法。
+> 简洁轻量的跨平台 Markdown 编辑器 —— 左边写，右边即时看到成品。
 
-## 特性
+Windows / macOS 双端运行，支持实时预览与快捷插入 Markdown 语法。
 
-- **实时预览**：输入即渲染，80ms 防抖不卡顿
-- **三种视图**：仅编辑 / 分栏（可拖拽分隔条）/ 仅预览
-- **快捷插入**：表格、引用、代码块、有序/无序/任务列表、分隔线、链接、图片
-- **智能包裹**：选中文字后按 `Ctrl+B` 自动加粗，再次按下取消包裹
-- **智能表格**：选中若干行按 `Ctrl+T`，自动生成表格（首行为表头）
-- **块级标题**：`Ctrl+Alt+1/2/3` 切换 H1/H2/H3，再按一次降级为正文
-- **自动补全括号**：输入 `(`、`*`、`` ` `` 等自动配对
-- **Tab 缩进**：`Tab` / `Shift+Tab` 增减缩进
-- **自动暂存**：编辑内容实时写入 localStorage，意外关闭不丢稿
-- **导出 HTML**：一键生成带样式的独立 HTML（含深色适配）
-- **深色模式**：跟随系统，可 `Ctrl+D` 手动切换
-- **最近文件**：菜单记录最近打开的 10 个文档
-- **中文友好**：全中文菜单、状态栏显示行/列位置、字数统计
+---
 
-## 快捷键
+## 一、这是什么
 
-| 操作 | Windows | macOS |
-| --- | --- | --- |
-| 新建 / 打开 / 保存 | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | `Cmd+N` / `Cmd+O` / `Cmd+S` |
-| 另存为 / 导出 HTML | `Ctrl+Shift+S` / `Ctrl+Shift+E` | `Cmd+Shift+S` / `Cmd+Shift+E` |
-| 粗体 / 斜体 / 行内代码 | `Ctrl+B` / `Ctrl+I` / `Ctrl+E` | 同左（Cmd） |
-| 删除线 | `Ctrl+Shift+X` | `Cmd+Shift+X` |
-| H1 / H2 / H3 | `Ctrl+Alt+1/2/3` | `Cmd+Alt+1/2/3` |
-| 插入表格 | `Ctrl+T` | `Cmd+T` |
-| 插入引用 / 代码块 | `Ctrl+Shift+Q` / `Ctrl+Shift+K` | 同左（Cmd） |
-| 有序 / 无序 / 任务列表 | `Ctrl+Shift+7/8/9` | 同左（Cmd） |
-| 分隔线 / 链接 / 图片 | `Ctrl+Shift+M` / `Ctrl+Shift+L` / `Ctrl+Shift+I` | 同左（Cmd） |
-| 视图：编辑 / 分栏 / 预览 | `Ctrl+1/2/3` | `Cmd+1/2/3` |
-| 深色模式 | `Ctrl+D` | `Cmd+D` |
-| 查找 | `Ctrl+F` | `Cmd+F` |
+轻墨是一个**开箱即用**的 Markdown 编辑器：
 
-## 运行
+- **左侧写 Markdown，右侧实时预览** —— 打字即渲染，80ms 防抖不卡顿
+- **一键插入格式** —— 表格、引用、代码块、列表、分隔线、链接、图片
+- **三视图切换** —— 仅编辑 / 分栏 / 仅预览，中间分隔条可拖拽
+- **深色模式** —— 跟随系统，`Ctrl+D` 手动切换
+- **不会丢稿** —— 内容实时暂存，意外关闭可恢复
 
-```bash
-npm install
-npm start          # 开发运行
-```
+无需注册、无需联网、无需配置，打开就能写。
 
-> 若在 WorkBuddy / VSCode 内置终端中运行，需先清除 `ELECTRON_RUN_AS_NODE`：
-> `run.bat` 已自动处理。
+---
 
-## 打包
+## 二、快速开始（只下载使用）
 
-```bash
-npm run pack:win    # Windows：NSIS 安装包 + 绿色便携版 → release-v2/
-npm run pack:mac    # macOS DMG（必须在 mac 上执行）
-npm run pack        # 双平台（需 mac）
-```
+### Windows
 
-产物位于 `release-v2/` 目录。
+到 [`dist/windows/`](dist/windows/) 目录取文件：
 
-### macOS 交叉打包（在 Windows 上产出 mac zip）
-
-`.dmg` 必须用 macOS 的 `hdiutil`，无法交叉生成。但 **`.zip` 形式的 `.app` 可以**，
-本项目内置了一套纯 JS 管线绕过平台限制：
-
-```bash
-npm run mac:fetch    # 下载 Electron mac 运行时（npmmirror 镜像）
-npm run pack:mac-x   # 组装 MDX.app → 压缩 → release-v2/mac/
-```
-
-产出 `MDX-1.0.0-mac-arm64.zip`（Apple Silicon）与 `MDX-1.0.0-mac-x64.zip`（Intel）。
-
-原理与三个必须绕开的坑：
-
-| 限制 | 现象 | 应对 |
-| --- | --- | --- |
-| electron-builder 硬性检查 | `Build for macOS is supported only on macOS` | 不用它，手动组装 |
-| Windows 自带 tar 拒绝 mac zip | `This does not look like a tar archive` | 自写 `unzip.js` / `zip.js` 纯 JS 解压压缩 |
-| Node 的 `fs.cpSync` 在中文路径崩溃 | 进程被强杀，`0xC0000409` | 手写 `readdirSync` + `copyFileSync` 递归 |
-
-组装流程：解压官方 Electron 运行时 → 删 `default_app.asar` → 注入自己的 `app.asar`
-→ 重命名可执行文件为 `MDX` → 改 `Info.plist` 标识 → 压缩（保留 Unix 可执行位）。
-
-> **未签名**：产物没有 Apple 开发者签名。首次打开需右键选「打开」，
-> 或 `xattr -dr com.apple.quarantine /Applications/MDX.app`。
-> 如需免警告分发，得在 mac 上用 `codesign` + 公证（需付费开发者账号）。
-
-## 技术栈
-
-| 模块 | 选型 |
+| 文件 | 说明 |
 | --- | --- |
-| 桌面外壳 | Electron 33 |
-| 编辑器内核 | CodeMirror 6（markdown 语法高亮） |
-| 渲染 | marked + DOMPurify（XSS 防护） |
-| 打包 | esbuild（渲染层）+ electron-builder |
-| 前端 | 原生 JS + CSS 变量，无框架 |
+| `轻墨 Setup 1.1.0.exe` | **安装版**（推荐）。双击安装，可选安装目录，自动创建桌面快捷方式 |
+| `轻墨 1.1.0.exe` | **便携版**。免安装，双击即用，适合放 U 盘 |
 
-## 设计说明
+> 提示：Windows 可能提示「未知发布者」，这是因为没有购买代码签名证书。
+> 点「更多信息」→「仍要运行」即可。
 
-**图标**：全部为手写 SVG symbol（24 网格 / 1.6 描边 / 圆角端点），以 `<use href="#id">` 引用。
-不使用 emoji——emoji 依赖系统字体，在小尺寸下笔画粘连、视觉重量不均。
+### macOS
 
-**配色**：9 级中性色阶（`--c-0` ~ `--c-900`）+ 单一强调色 `--accent`。
-暗色主题只覆盖 CSS 变量，不改任何结构规则。
+到 [`dist/macos/`](dist/macos/) 目录，按你的 Mac 选：
 
-**排版**：预览区 15.5px / 行高 1.85 / 左右 46px 留白；标题加负字距收紧字面；
-状态栏数字用 `font-variant-numeric: tabular-nums` 防跳动。
+| 文件 | 适用机型 |
+| --- | --- |
+| `QingMo-1.1.0-mac-arm64.zip` | Apple Silicon（M1/M2/M3/M4 系列）—— 大多数人选这个 |
+| `QingMo-1.1.0-mac-x64.zip` | Intel 芯片（较老的机型） |
 
-**层级**：边框从重到轻为 `1px 分隔条` < `1px 边框` < `分组容器底色`。
-工具栏分组 hover 才显边框，常态降低视觉噪声。
+**安装步骤**：
 
-### 设计走查
+1. 解压 zip，得到 `QingMo.app`（访达里显示为「轻墨」）
+2. 把 `QingMo.app` 拖进「应用程序」文件夹
+3. **首次打开必须右键点击** `QingMo.app` → 选择「打开」→ 在弹窗中再点「打开」
 
-渲染层支持 `?shot=1&theme=light|dark` 参数，注入演示文档并强制主题，
-用于无头浏览器截图核对设计：
+> 为什么不能双击？因为应用没有 Apple 签名和公证，macOS 的 Gatekeeper 会拦截。
+> 右键打开一次后，以后就可以正常双击了。
+>
+> 如果还是打不开，在终端执行：
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/QingMo.app
+> ```
+>
+> 想要免警告的分发体验，需要在 Mac 上用 Apple 开发者账号签名并公证。
+
+---
+
+## 三、日常使用
+
+### 3.1 界面说明
+
+```
+┌──────────────────────────────────────────────────┐
+│ 轻墨  文档名.md        [工具栏图标]      [◫|◐]    │  ← 标题栏
+├────────────────────┬─────────────────────────────┤
+│                    ┃                             │
+│   Markdown         ┃      预览                    │
+│   （编辑区）        ┃   （渲染结果）               │
+│                    ┃                             │
+│                    ┃                  ← 拖这条线 │
+├────────────────────┴─────────────────────────────┤
+│ 文件路径 · 行 12, 列 4      已保存  1,284 字  96 行 │  ← 状态栏
+└──────────────────────────────────────────────────┘
+```
+
+- **右上角三个图标**：仅编辑 / 分栏 / 仅预览
+- **中间竖线**：按住拖动可调整两侧比例
+- **左下角**：当前文件路径和光标位置
+- **右下角**：保存状态、字数、行数
+
+### 3.2 快捷键全表
+
+Windows 用 `Ctrl`，macOS 用 `⌘ Command`（下文统一写作 `Ctrl`）。
+
+#### 文件
+
+| 操作 | 快捷键 |
+| --- | --- |
+| 新建文档 | `Ctrl+N` |
+| 打开文件 | `Ctrl+O` |
+| 保存 | `Ctrl+S` |
+| 另存为 | `Ctrl+Shift+S` |
+| 导出为 HTML | `Ctrl+Shift+E` |
+
+#### 格式
+
+| 操作 | 快捷键 | 提示 |
+| --- | --- | --- |
+| 加粗 | `Ctrl+B` | 选中文字后按，**再按一次取消加粗** |
+| 斜体 | `Ctrl+I` | 同上，可反复切换 |
+| 删除线 | `Ctrl+Shift+X` | |
+| 行内代码 | `Ctrl+E` | |
+| 标题 1 / 2 / 3 | `Ctrl+Alt+1/2/3` | **再按一次降级为正文** |
+
+#### 插入
+
+| 操作 | 快捷键 | 提示 |
+| --- | --- | --- |
+| 表格 | `Ctrl+T` | **选中多行再按，首行自动作表头** |
+| 引用块 | `Ctrl+Shift+Q` | 选中的每行都会加上 `>` |
+| 代码块 | `Ctrl+Shift+K` | 选中文本会自动包进代码块 |
+| 有序列表 | `Ctrl+Shift+7` | |
+| 无序列表 | `Ctrl+Shift+8` | |
+| 任务列表 | `Ctrl+Shift+9` | 自动加 `- [ ]` |
+| 分隔线 | `Ctrl+Shift+M` | |
+| 链接 | `Ctrl+Shift+L` | 选中文字作链接文字 |
+| 图片 | `Ctrl+Shift+I` | |
+
+#### 视图
+
+| 操作 | 快捷键 |
+| --- | --- |
+| 仅编辑 / 分栏 / 仅预览 | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` |
+| 深色模式 | `Ctrl+D` |
+| 查找替换 | `Ctrl+F` |
+
+### 3.3 三个实用技巧
+
+**① 选中多行变表格**
+
+选中这几行：
+
+```
+产品
+价格
+备注
+```
+
+按 `Ctrl+T`，立刻变成：
+
+```markdown
+| 产品 | 价格 | 备注 |
+| --- | --- | --- |
+|  |  |  |
+```
+
+**② 格式可反复切换**
+
+选中「重点」按 `Ctrl+B` 变粗体，**再按一次**恢复原样 —— 不会变成 `****重点****`。
+
+**③ 草稿自动暂存**
+
+编辑内容实时写入本地暂存，即使意外关闭，下次打开能恢复。
+正式保存（`Ctrl+S`）后暂存清除。状态栏显示「未保存」时有橙色圆点提示。
+
+---
+
+## 四、目录结构说明
+
+```
+qingmo/
+├── dist/                    ← 【现成版本】直接拿去用，不用碰
+│   ├── windows/               Windows 安装版 + 便携版
+│   └── macos/                 macOS 双架构 zip
+│
+├── src/                     ← 【开发】源代码
+│   ├── main/                  Electron 主进程：窗口、菜单、文件读写
+│   │   ├────── main.js
+│   │   └── preload.js          安全桥接（白名单 IPC）
+│   └── renderer/              渲染进程：编辑器 + 预览 + 界面
+│       ├── index.html          界面结构（含 SVG 图标雪碧图）
+│       ├── style.css           全部样式（亮/暗双主题）
+│       ├── app.js              核心逻辑
+│       └── app.bundle.js       打包产物（勿手改）
+│
+├── scripts/                 ← 【开发】构建脚本
+│   ├── build-renderer.js      渲染层打包（esbuild）
+│   └── mac/                   macOS 交叉打包管线
+│       ├───── fetch-runtime.js     下载 Electron mac 运行时
+│       ├── unzip.js             纯 JS ZIP 解压
+│       ├── zip.js               纯 JS ZIP 压缩
+│       └── build-mac.js         组装 .app
+│
+├── docs/                    ← 【文档】
+│   ├── 使用手册.md             详细使用说明
+│   └── 开发指南.md             如何从源码开发
+│
+├── _archive/                ← 【历史】旧版本产物，仅备查
+│
+├── package.json             项目配置
+├── run.bat                  Windows 一键启动
+└── README.md                本文件
+```
+
+**三类文件的区别**：
+
+| 目录 | 性质 | 你需要做什么 |
+| --- | --- | --- |
+| `dist/` | 现成版本 | 直接使用，无需任何操作 |
+| `src/` `scripts/` | 源代码 | 想改功能才动，需要 Node 环境 |
+| `_archive/` | 历史产物 | 不用管，可删 |
+
+---
+
+## 五、从源码运行（开发者）
+
+需要 [Node.js](https://nodejs.org/) 18 以上。
 
 ```bash
-msedge --headless=new --screenshot=out.png --window-size=1440,900 \
-  "file:///path/to/index.html?shot=1&theme=dark"
+npm install     # 安装依赖
+npm start       # 启动应用
 ```
 
-## 项目结构
+重新打包：
 
-```
-mdx-editor/
-├─ src/
-│  ├─ main/
-│  │  ├─ main.js        # 主进程：窗口、菜单、文件 IPC
-│  │  └─ preload.js     # 安全桥接（contextIsolation）
-│  └─ renderer/
-│     ├─ index.html
-│     ├─ style.css      # 亮/暗双主题 CSS 变量
-│     ├─ app.js         # 编辑器 + 预览 + 插入逻辑
-│     └─ app.bundle.js  # esbuild 产物（勿手改）
-├─ scripts/
-│  └─ build-renderer.js
-└─ run.bat
+```bash
+npm run pack:win        # Windows 安装版 + 便携版
+npm run mac:fetch       # 下载 mac 运行时（只需一次）
+npm run pack:mac-x      # macOS 双架构 zip
 ```
 
-## 安全说明
+详见 [`docs/开发指南.md`](docs/开发指南.md)。
 
-- `contextIsolation: true` + `nodeIntegration: false`，渲染层无 Node 权限
-- 所有文件操作走 preload 白名单 IPC
-- 预览 HTML 经 DOMPurify 净化，防止 XSS
-- CSP 限制脚本来源，仅允许本地资源
+---
+
+## 六、安全说明
+
+轻墨在设计上做了几件事：
+
+- **渲染进程无 Node 权限** —— `contextIsolation: true` + `nodeIntegration: false`
+- **文件操作走白名单** —— 只有 preload 显式暴露的方法能被调用
+- **预览防 XSS** —— HTML 经 DOMPurify 净化，恶意脚本不会执行
+- **CSP 限制** —— 只允许加载本地资源
+
+打开的 `.md` 文件不会自动执行任何内容。
+
+---
+
+## 七、反馈
+
+发现问题或想要新功能，欢迎到
+[GitHub 仓库](https://github.com/engrecho/qingmo) 提 Issue。
+
+---
+
+**轻墨 QingMo** · v1.1.0 · MIT License
