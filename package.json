@@ -13,7 +13,8 @@
     "pack:mac": "npm run build:renderer && electron-builder --mac",
     "pack": "npm run build:renderer && electron-builder --win --mac",
     "pack:mac-x": "node scripts/mac/build-mac.js",
-    "mac:fetch": "node scripts/mac/fetch-runtime.js"
+    "mac:fetch": "node scripts/mac/fetch-runtime.js",
+    "cache:clean": "node scripts/clean-cache.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",

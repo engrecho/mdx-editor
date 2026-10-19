@@ -19,8 +19,10 @@ const { extract } = require('./unzip.js');
 
 const log = (...a) => console.error(util.format(...a));
 
-const BUILD = path.join(__dirname, '..', '..', '..', 'mdxbuild'); // 下载缓存目录
 const SRC = path.join(__dirname, '..', '..');
+// 运行时缓存（npm run mac:fetch 下载到这）与临时工作区，都收进项目内 .cache/
+const CACHE = path.join(SRC, '.cache', 'electron-mac');
+const TMP = path.join(SRC, '.cache', 'mac-build');
 const ARCHES = ['arm64', 'x64'];
 
 // @electron/asar 是 ESM-only，CJS 的 createPackageWithOptions 在此版本静默不产出，
@@ -30,13 +32,14 @@ const ASAR_CLI = path.join(SRC, 'node_modules', '@electron', 'asar', 'bin', 'asa
 if (!fs.existsSync(ASAR_CLI)) { log('X 未找到 asar CLI: %s', ASAR_CLI); process.exit(1); }
 const asarCreate = (src, dest) => {
   execFileSync(NODE_BIN, [ASAR_CLI, 'pack', src, dest],
-    { cwd: BUILD, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 * 512 });
+    { cwd: TMP, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 * 512 });
   if (!fs.existsSync(dest)) throw new Error('asar 打包未产出: ' + dest);
 };
 
 /* ---------- 1. 应用资源暂存 ---------- */
 const STAMP = String(process.hrtime.bigint()).slice(-9);
-const appStage = path.join(BUILD, 'stage-' + STAMP);
+const appStage = path.join(TMP, 'stage-' + STAMP);
+fs.mkdirSync(TMP, { recursive: true });
 fs.mkdirSync(appStage, { recursive: true });
 
 // 手写递归拷贝：fs.cpSync 在此 Node 构建 + 中文路径下会触发
@@ -74,10 +77,10 @@ fs.mkdirSync(outDir, { recursive: true });
 for (const arch of ARCHES) {
   log('\n=== [%s] ===', arch);
 
-  const zip = path.join(BUILD, 'electron-darwin-' + arch + '.zip');
+  const zip = path.join(CACHE, 'electron-darwin-' + arch + '.zip');
   if (!fs.existsSync(zip)) { log('X 缺少 %s', zip); continue; }
 
-  const work = path.join(BUILD, 'w-' + arch + '-' + STAMP);
+  const work = path.join(TMP, 'w-' + arch + '-' + STAMP);
   fs.mkdirSync(work, { recursive: true });
 
   log('解压运行时（纯 JS，绕开系统 tar）...');
@@ -152,7 +155,7 @@ for (const arch of ARCHES) {
   try { fs.unlinkSync(outZip); } catch (e) {}
   log('压缩打包...');
   execFileSync(NODE_BIN, [path.join(__dirname, 'zip.js'), newApp, outZip],
-    { cwd: BUILD, stdio: ['inherit', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 * 512 });
+    { cwd: TMP, stdio: ['inherit', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 * 512 });
 
   log('OK %s  %s MB', path.basename(outZip),
       (fs.statSync(outZip).size / 1048576).toFixed(1));

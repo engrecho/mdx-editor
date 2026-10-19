@@ -191,6 +191,10 @@ qingmo/
 │   ├── 使用手册.md             详细使用说明
 │   └── 开发指南.md             如何从源码开发
 │
+├── .cache/                 ← 【缓存】可随时删，会自动重建
+│   ├── electron-mac/          Electron mac 运行时（约 195MB）
+│   └── mac-build/             打包临时目录（每次几百MB，纯垃圾）
+│
 ├── _archive/                ← 【历史】旧版本产物，仅备查
 │
 ├── package.json             项目配置
@@ -204,7 +208,19 @@ qingmo/
 | --- | --- | --- |
 | `dist/` | 现成版本 | 直接使用，无需任何操作 |
 | `src/` `scripts/` | 源代码 | 想改功能才动，需要 Node 环境 |
+| `.cache/` | 构建缓存 | 可随时删，会自动重建 |
 | `_archive/` | 历史产物 | 不用管，可删 |
+
+### 清理缓存
+
+mac 打包会产生几百 MB 的临时文件，清一下：
+
+```bash
+npm run cache:clean          # 只删临时目录，保留运行时（推荐）
+npm run cache:clean -- --all # 连运行时一起删，回收约 195MB
+```
+
+运行时删掉后，下次打包前需重新执行 `npm run mac:fetch`。
 
 ---
 
