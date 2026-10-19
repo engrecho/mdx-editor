@@ -140,6 +140,12 @@ let dirty = false;
 let renderTimer = null;
 const DRAFT_KEY = "mdx.draft";
 const THEME_KEY = "mdx.theme";
+const SB_KEY = "mdx.sidebar";
+
+/* 多标签：每个 tab 存一份内容 + 光标 + 滚动位置 */
+let tabs = [];
+let activeId = null;
+let tabSeq = 0;
 
 /* ============ 渲染预览 ============ */
 const previewEl = document.getElementById("preview");
@@ -169,9 +175,32 @@ function onUpdate(u) {
     setDirty(true);
     scheduleRender();
     saveDraft();
+    // 同步到tab 并刷新侧边栏脏标记（节流，避免每次按键都重排 DOM）
+    scheduleSidebarSync();
   }
   if (u.selectionSet || u.docChanged) updateStatus();
 }
+
+// 侧边栏脏标记刷新：250ms 内合并多次按键
+let sbSyncTimer = null;
+function scheduleSidebarSync() {
+  if (sbSyncTimer) return;
+  sbSyncTimer = setTimeout(() => {
+    sbSyncTimer = null;
+    const t = activeTab();
+    if (t) { t.dirty = true; t.content = view.state.doc.toString(); }
+    renderSidebar();
+  }, 250);
+}
+
+// 记录光标与滚动位置，供切回时恢复
+let lastSaveCursor = 0;
+setInterval(() => {
+  const t = activeTab();
+  if (!t) return;
+  t.sel = view.state.selection.main.head;
+  try { t.scroll = view.scrollDOM.scrollTop; } catch (e) {}
+}, 800);
 
 /* ============ 状态栏 ============ */
 const stPath = document.getElementById("stPath");
@@ -198,75 +227,278 @@ function updateStatus() {
   stPath.textContent = `${currentPath || "未命名"}  ·  行 ${line.number}, 列 ${pos - line.from + 1}`;
 }
 
-/* ============ 文件操作 ============ */
+/* ============ 文件操作（多标签） ============ */
+function tabName(t) {
+  if (t.path) return t.path.split(/[\\/]/).pop();
+  return t.name || "未命名.md";
+}
+
+function activeTab() {
+  return tabs.find(t => t.id === activeId) || null;
+}
+
+/** 同步当前编辑器内容回 active tab */
+function syncActive() {
+  const t = activeTab();
+  if (!t) return;
+  t.content = view.state.doc.toString();
+  t.dirty = dirty;
+}
+
+function addTab({ path = null, content = '', name = '' } = {}) {
+  // 已打开同一路径则切过去
+  if (path) {
+    const exist = tabs.find(t => t.path === path);
+    if (exist) { switchTab(exist.id); return exist; }
+  }
+  const t = { id: ++tabSeq, path, name, content, dirty: false, sel: 0, scroll: 0 };
+  tabs.push(t);
+  switchTab(t.id);
+  return t;
+}
+
+function switchTab(id) {
+  if (id === activeId) return;
+  syncActive();
+
+  const t = tabs.find(x => x.id === id);
+  if (!t) return;
+  activeId = id;
+  dirty = false;
+
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: t.content || "" },
+    selection: { anchor: Math.min(t.sel || 0, (t.content || "").length) },
+    scrollIntoView: false
+  });
+  // 恢复滚动位置
+  requestAnimationFrame(() => {
+    try { view.scrollDOM.scrollTop = t.scroll || 0; } catch (e) {}
+  });
+
+  currentPath = t.path;
+  fileName.textContent = tabName(t);
+  setDirty(t.dirty);
+  renderSidebar();
+  renderPreview();
+  updateStatus();
+}
+
+async function closeTab(id) {
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx < 0) return;
+  const t = tabs[idx];
+
+  if (t.dirty) {
+    const r = window.confirm(`「${tabName(t)}」有未保存的修改。\n\n点「确定」保存，点「取消」放弃关闭，点「取消」也可选择不关闭。`);
+    // confirm 只有两态，这里用两次确认区分
+    if (r) {
+      const saved = await saveTab(t);
+      if (!saved) return;   // 取消保存对话框则不关闭
+    } else {
+      const again = window.confirm(`确定放弃「${tabName(t)}」的修改吗？此操作不可恢复。`);
+      if (!again) return;
+    }
+  }
+
+  tabs.splice(idx, 1);
+  if (activeId === id) {
+    activeId = null;
+    if (tabs.length) {
+      // 打开相邻的：优先右侧，其次左侧
+      const next = tabs[idx] || tabs[idx - 1];
+      if (next) switchTab(next.id);
+    } else {
+      addTab();   // 全部关掉后留一个空文档
+    }
+  } else {
+    renderSidebar();
+  }
+  persistSession();
+}
+
+async function closeAllTabs() {
+  const dirtyTabs = tabs.filter(t => t.dirty);
+  if (dirtyTabs.length) {
+    const ok = window.confirm(`${dirtyTabs.length} 个文档有未保存的修改，全部关闭将丢失这些修改。\n\n确定继续吗？`);
+    if (!ok) return;
+  }
+  tabs = [];
+  activeId = null;
+  addTab();
+  persistSession();
+}
+
 async function newFile() {
-  if (dirty && !(await confirmDiscard())) return;
-  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "" } });
-  currentPath = null;
-  fileName.textContent = "未命名.md";
-  setDirty(false);
+  addTab();
   view.focus();
   toast("已新建文档");
 }
 
-async function confirmDiscard() {
-  return window.confirm("当前文档有未保存的修改，确定放弃吗？");
-}
-
 async function openFile() {
-  if (dirty && !(await confirmDiscard())) return;
   const r = await window.api.open();
   if (!r) return;
   if (r.error) { toast("打开失败：" + r.error); return; }
-  loadDoc(r.content, r.path);
+  addTab({ path: r.path, content: r.content || '' });
+  toast("已打开 " + tabName(tabs.find(t => t.id === activeId) || {}));
 }
 
-function loadDoc(content, p) {
-  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content || "" } });
-  currentPath = p || null;
-  fileName.textContent = currentPath ? currentPath.split(/[\\/]/).pop() : "未命名.md";
-  stPath.textContent = currentPath || "未命名";
-  setDirty(false);
-  clearDraft();
-  renderPreview();
-  view.focus();
+/** 保存指定 tab（可指定是否另存为）；返回是否成功 */
+async function saveTab(t, saveAs = false) {
+  const content = t.id === activeId ? view.state.doc.toString() : t.content;
+  if (saveAs || !t.path) {
+    const r = await window.api.saveAs(content, tabName(t));
+    if (!r) return false;
+    t.path = r.path;
+    t.name = '';
+  } else {
+    await window.api.save(t.path, content);
+  }
+  t.content = content;
+  t.dirty = false;
+  if (t.id === activeId) { setDirty(false); fileName.textContent = tabName(t); }
+  renderSidebar();
+  window.api.rebuildMenu();
+  persistSession();
+  return true;
 }
 
 async function saveFile(saveAs) {
-  const content = view.state.doc.toString();
-  if (saveAs || !currentPath) {
-    const r = await window.api.saveAs(content, currentPath ? currentPath.split(/[\\/]/).pop() : "未命名.md");
-    if (!r) return;
-    currentPath = r.path;
-  } else {
-    await window.api.save(currentPath, content);
-  }
-  fileName.textContent = currentPath.split(/[\\/]/).pop();
-  setDirty(false);
-  window.api.rebuildMenu();
-  toast("已保存");
+  syncActive();
+  const t = activeTab();
+  if (!t) return;
+  const ok = await saveTab(t, saveAs);
+  if (ok) toast("已保存");
 }
 
-/* ============ 草稿（崩溃恢复） ============ */
+/* ============ 会话持久化（多标签崩溃恢复） ============ */
+const SESSION_KEY = "mdx.session";
+
 function saveDraft() {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      content: view.state.doc.toString(),
-      path: currentPath
+    syncActive();
+    // 已保存的文档不存内容（从磁盘读），只存路径，减小体积
+    const list = tabs.map(t => ({
+      path: t.path,
+      name: t.name,
+      dirty: t.dirty,
+      content: t.dirty ? t.content : null
     }));
-  } catch (e) {}
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      v: 1,
+      activePath: (activeTab() && activeTab().path) || null,
+      list: list
+    }));
+  } catch (e) {
+    // 容量超限时兜底：只存未保存的内容
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        v: 1,
+        list: tabs.filter(t => t.dirty).map(t => ({ path: t.path, name: t.name, dirty: true, content: t.content }))
+      }));
+    } catch (e2) {}
+  }
 }
-function loadDraft() {
-  try {
-    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
-    if (d && d.content) {
-      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: d.content } });
-      if (d.path) { currentPath = d.path; fileName.textContent = d.path.split(/[\\/]/).pop(); }
-      setDirty(true);
+
+/** 恢复上次会话：已保存的从磁盘重读，未保存的用暂存内容 */
+async function loadDraft() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch (e) {}
+  if (!d || !d.list || !d.list.length) return false;
+
+  const restored = [];
+  for (const it of d.list) {
+    let content = it.content;
+    if (!content && it.path) {
+      try {
+        const r = await window.api.openPath(it.path);
+        if (r && !r.error) content = r.content || "";
+        else continue;
+      } catch (e) { continue; }
     }
-  } catch (e) {}
+    if (content == null) content = "";
+    restored.push({ path: it.path, name: it.name, content: content, dirty: !!it.dirty });
+  }
+  if (!restored.length) return false;
+
+  for (const r of restored) addTab(r);
+  const target = tabs.find(t => t.path === d.activePath);
+  if (target) switchTab(target.id);
+  return true;
 }
-function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+
+function clearDraft() { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
+function persistSession() { saveDraft(); }
+
+/* ============ 侧边栏折叠 ============ */
+function setSidebar(collapsed) {
+  const ws = document.querySelector(".workspace");
+  if (!ws) return;
+  ws.dataset.sb = collapsed ? "collapsed" : "open";
+  try { localStorage.setItem(SB_KEY, collapsed ? "collapsed" : "open"); } catch (e) {}
+  const u = document.querySelector("#btnPanel use");
+  if (u) u.setAttribute("href", collapsed ? "#i-panel-close" : "#i-panel");
+  requestAnimationFrame(() => { view.requestMeasure(); renderPreview(); });
+}
+function toggleSidebar() {
+  const ws = document.querySelector(".workspace");
+  setSidebar(ws.dataset.sb !== "collapsed");
+}
+
+/* ============ 侧边栏渲染 ============ */
+const sbList = document.getElementById("sbList");
+const sbCount = document.getElementById("sbCount");
+
+function renderSidebar() {
+  if (!sbList) return;
+  sbCount.textContent = tabs.length;
+  if (!tabs.length) {
+    const e = document.createElement("div");
+    e.className = "sb-empty";
+    e.textContent = "没有打开的文档";
+    sbList.replaceChildren(e);
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const t of tabs) {
+    const el = document.createElement("div");
+    el.className = "sb-item" + (t.id === activeId ? " active" : "");
+    el.dataset.id = t.id;
+    el.title = t.path || "（未保存）";
+
+    const ico = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#i-doc");
+    ico.appendChild(use);
+
+    const name = document.createElement("span");
+    name.className = "sb-name";
+    name.textContent = tabName(t);
+    if (t.dirty) {
+      const dot = document.createElement("i");
+      dot.className = "sb-dot";
+      name.appendChild(dot);
+    }
+
+    const close = document.createElement("button");
+    close.className = "sb-close";
+    close.title = "关闭（中间键）";
+    close.innerHTML = '<svg><use href="#i-x"/></svg>';
+    close.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeTab(t.id);
+    });
+
+    el.addEventListener("click", () => switchTab(t.id));
+    el.addEventListener("auxclick", (e) => { if (e.button === 1) closeTab(t.id); });
+
+    el.append(ico, name, close);
+    frag.appendChild(el);
+  }
+  sbList.replaceChildren(frag);
+  const act = sbList.querySelector(".sb-item.active");
+  if (act) act.scrollIntoView({ block: "nearest" });
+}
 
 /* ============ 插入 / 格式化 ============ */
 function getSel() {
@@ -624,6 +856,88 @@ document.getElementById("titlebar").addEventListener("click", e => {
   if (seg) setMode(seg.dataset.view);
 });
 document.getElementById("btnTheme").addEventListener("click", toggleTheme);
+document.getElementById("btnPanel").addEventListener("click", toggleSidebar);
+document.getElementById("btnCollapse").addEventListener("click", toggleSidebar);
+document.getElementById("sbNew").addEventListener("click", () => newFile());
+document.getElementById("sbOpen").addEventListener("click", () => openFile());
+document.getElementById("sbCloseAll").addEventListener("click", () => closeAllTabs());
+
+/* 侧边栏宽度拖拽；折叠态下双击把手展开 */
+(function setupSidebarHandle() {
+  const handle = document.getElementById("sbHandle");
+  const ws = document.querySelector(".workspace");
+  let dragging = false, startX = 0, startW = 0;
+
+  handle.addEventListener("mousedown", e => {
+    if (ws.dataset.sb === "collapsed") return;
+    dragging = true;
+    startX = e.clientX;
+    startW = parseInt(getComputedStyle(ws).getPropertyValue("--sb-w")) || 208;
+    handle.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  handle.addEventListener("dblclick", () => setSidebar(ws.dataset.sb !== "collapsed"));
+
+  window.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    const w = Math.min(420, Math.max(140, startW + (e.clientX - startX)));
+    ws.style.setProperty("--sb-w", w + "px");
+    view.requestMeasure();
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    try {
+      const w = parseInt(getComputedStyle(ws).getPropertyValue("--sb-w"));
+      if (w) localStorage.setItem("mdx.sbWidth", String(w));
+    } catch (e) {}
+    renderPreview();
+  });
+})();
+
+/* 全局快捷键：侧边栏折叠、标签切换、关闭 */
+window.addEventListener("keydown", e => {
+  const mod = e.ctrlKey || e.metaKey;
+
+  // Ctrl+B 折叠侧边栏
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
+    // 如果有选区，优先给加粗
+    const sel = view.state.selection.main;
+    if (sel.empty) { e.preventDefault(); toggleSidebar(); return; }
+  }
+
+  // Ctrl+W 关闭当前标签
+  if (mod && e.key.toLowerCase() === "w" && activeId != null) {
+    e.preventDefault();
+    closeTab(activeId);
+    return;
+  }
+
+  // Ctrl+Tab / Ctrl+Shift+Tab 切换标签
+  if (mod && e.key === "Tab") {
+    e.preventDefault();
+    if (tabs.length < 2) return;
+    const i = tabs.findIndex(t => t.id === activeId);
+    const next = e.shiftKey
+      ? (i - 1 + tabs.length) % tabs.length
+      : (i + 1) % tabs.length;
+    switchTab(tabs[next].id);
+    return;
+  }
+
+  // Ctrl+1..9 直接跳到第 N 个标签
+  if (mod && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+    const idx = parseInt(e.key, 10) - 1;
+    if (idx < tabs.length) { e.preventDefault(); switchTab(tabs[idx].id); }
+  }
+});
 
 window.api.on([
   'cmd:new', 'cmd:open', 'cmd:save', 'cmd:saveAs', 'cmd:exportHtml', 'cmd:find',
@@ -644,9 +958,8 @@ window.api.on([
 ], (ch) => run(ch));
 
 window.api.on('cmd:openPath', async p => {
-  if (dirty && !(await confirmDiscard())) return;
   const r = await window.api.openPath(p);
-  if (r && !r.error) loadDoc(r.content, r.path);
+  if (r && !r.error) addTab({ path: r.path, content: r.content || '' });
 });
 
 /* 预览区点击表格不触发任何编辑 */
@@ -666,30 +979,63 @@ document.getElementById("panes").addEventListener("drop", e => {
   if (f) toast("提示：图片请用 Markdown 语法 ![](路径) 引用");
 });
 
-/* 启动 */
-setTheme(localStorage.getItem(THEME_KEY) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-setMode(localStorage.getItem('mdx.mode') || 'split');
-loadDraft();
-renderPreview();
-updateStatus();
-view.focus();
+/* ============ 启动 ============ */
+async function boot() {
+  setTheme(localStorage.getItem(THEME_KEY) ||
+    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  setMode(localStorage.getItem('mdx.mode') || 'split');
 
-/* 设计走查用：?shot=1&theme=light|dark 注入演示文档并置顶主题 */
-(function designPreview() {
+  // 侧边栏折叠状态与宽度
+  try {
+    const w = localStorage.getItem('mdx.sbWidth');
+    if (w) document.querySelector('.workspace').style.setProperty('--sb-w', w + 'px');
+  } catch (e) {}
+  setSidebar(localStorage.getItem(SB_KEY) === 'collapsed');
+
+  // 恢复上次会话；没有则新建一个空白文档
+  const restored = await loadDraft();
+  if (!restored) addTab({ content: DEFAULT_DOC });
+
+  renderSidebar();
+  renderPreview();
+  updateStatus();
+  view.focus();
+}
+
+// designPreview 需在 boot 完成后执行，否则两者会互相覆盖 tab 状态
+const booted = boot();
+
+/* 设计走查用：?shot=1&theme=light|dark 注入多标签演示数据并置顶主题 */
+(async function designPreview() {
   let q;
   try { q = new URLSearchParams(location.search); } catch (e) { return; }
   if (q.get('shot') !== '1') return;
+  await booted;   // 等 boot 完成，避免 addTab(DEFAULT_DOC) 覆盖演示数据
+
   setTheme(q.get('theme') === 'dark' ? 'dark' : 'light');
-  const seed = window.__SEED_DOC__;
-  if (seed) {
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: seed } });
-    setDirty(false);
-    clearDraft();
-  }
+  if (q.get('sb') === 'collapsed') setSidebar(true);
+
+  const seed = window.__SEED_DOC__ || '';
+  // 造几个演示标签，展示侧边栏效果
+  const demo = [
+    { path: '/Users/jaylon/Documents/产品需求文档.md', content: seed, dirty: false },
+    { path: '/Users/jaylon/Documents/周报/2026-W42.md', content: '# 2026 第 42 周周报\n\n## 本周完成\n\n- Markdown 编辑器侧边栏\n- 图标体系\n\n## 下周计划\n\n- [ ] macOS 版本验证\n- [ ] 主题定制', dirty: true },
+    { path: '/Users/jaylon/Documents/读书笔记.md', content: '# 读书笔记\n\n> 好书值得反复读。\n\n## 待读\n\n- 《思考，快与慢》\n- 《原则》', dirty: false },
+    { name: '未命名.md', content: '# 草稿\n\n随手记点东西的地方。', dirty: true }
+  ];
+  tabs = [];
+  activeId = null;
+  tabSeq = 0;
+  for (const d of demo) addTab(d);
+  if (tabs[0]) switchTab(tabs[0].id);   // 切到第一个（产品需求文档）
+
   const f = document.getElementById('fileName');
   if (f) f.textContent = '产品需求文档.md';
   const p = document.getElementById('stPath');
-  if (p) p.textContent = '/Users/jaylon/Documents/产品需求文档.md · 行 1, 列 1';
+  if (p) p.textContent = '/Users/jaylon/Documents/产品需求文档.md  ·  行 1, 列 1';
+
+  clearDraft();
+  renderSidebar();
   renderPreview();
   updateStatus();
 })();
