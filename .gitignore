@@ -1,10 +1,18 @@
+# 依赖与构建产物
 node_modules/
-build-output/
 dist/
+dist-out/
+build-output/
 .cache/
 _archive/
 release/
 release-v2/
+
+# 图标生成产物（源文件 logo.svg 保留在仓库）
+build/icons/*.ico
+build/icons/*.icns
+build/icons/icon-*.png
+build/icons/*.base64.txt
 
 # 渲染层 esbuild 产物
 src/renderer/app.bundle.js

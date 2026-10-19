@@ -107,14 +107,26 @@ body { display: flex; flex-direction: column; user-select: none; }
   flex: 0 0 auto;
 }
 .logo {
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: .08em;
-  color: var(--accent);
-  padding: 2px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 3px;
   background: var(--accent-weak);
   border-radius: var(--r-sm);
+  cursor: default;
 }
+.logo img {
+  width: 16px; height: 16px;
+  border-radius: 3px;
+  display: block;
+}
+.logo b {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  color: var(--c-700);
+}
+[data-theme="dark"] .logo b { color: var(--c-900); }
 .doc-name {
   font-size: 12.5px;
   color: var(--c-500);

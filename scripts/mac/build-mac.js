@@ -153,6 +153,19 @@ for (const arch of ARCHES) {
   // 产物文件名用 ASCII，避免跨平台传输时中文文件名带来的兼容问题
   const outZip = path.join(outDir, `QingMo-${pkg.version}-mac-${arch}.zip`);
   try { fs.unlinkSync(outZip); } catch (e) {}
+  // 注入应用图标：.icns 放到 Resources，并在 Info.plist 里声明
+  const icns = path.join(SRC, 'build', 'icons', 'icon.icns');
+  if (fs.existsSync(icns)) {
+    fs.copyFileSync(icns, path.join(macRes, 'icon.icns'));
+    let p2 = fs.readFileSync(plistPath, 'utf-8');
+    if (!p2.includes('CFBundleIconFile')) {
+      p2 = p2.replace('</dict>',
+        '\t<key>CFBundleIconFile</key>\n\t<string>icon.icns</string>\n</dict>');
+      fs.writeFileSync(plistPath, p2);
+    }
+    log('  已注入 icon.icns');
+  }
+
   log('压缩打包...');
   execFileSync(NODE_BIN, [path.join(__dirname, 'zip.js'), newApp, outZip],
     { cwd: TMP, stdio: ['inherit', 'pipe', 'pipe'], maxBuffer: 1024 * 1024 * 512 });

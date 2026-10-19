@@ -258,7 +258,34 @@ npm run pack:mac-x      # macOS 双架构 zip
 
 ---
 
-## 七、反馈
+## 七、应用图标
+
+图标源文件：`build/icons/logo.svg`（1024×1024 矢量，3 个路径）。
+
+```bash
+npm run gen:icons     # 重新生成全套图标
+```
+
+产出：
+
+| 文件 | 用途 |
+| --- | --- |
+| `icon.ico` | Windows exe/快捷方式/任务栏（7 个尺寸） |
+| `icon.icns` | macOS 应用图标（11 种规格） |
+| `icon-16 ~ 1024.png` | 界面内嵌、文档配图 |
+| `icon-64.base64.txt` | 标题栏内嵌用base64 |
+
+图标出现在这些位置：Windows 任务栏与 Alt-Tab、桌面快捷方式、
+开始菜单、标题栏左上角、macOS Dock 与访达。
+
+**为什么不用现成工具**：环境里没有 Inkscape / ImageMagick / rsvg-convert。
+所以用 Edge 无头渲染出PNG，再用自写的 `png-tool.js` 缩放、`make-ico.js`
+封装 ICO/ICNS。两条限制：Edge 在小于 128px 的窗口不渲染，故统一从
+1024母图缩放；Node 调 Edge 会超时（ETIMEDOUT），故渲染环节走 Bash。
+
+---
+
+## 八、反馈
 
 发现问题或想要新功能，欢迎到
 [GitHub 仓库](https://github.com/engrecho/qingmo) 提 Issue。

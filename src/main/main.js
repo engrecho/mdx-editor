@@ -1,8 +1,20 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 let win = null;
+
+// 应用图标：开发时读 build/icons，打包后读 resources 里的
+function appIconPath() {
+  const candidates = [
+    path.join(__dirname, '..', '..', 'build', 'icons', 'icon-256.png'),
+    path.join(process.resourcesPath || '', 'icons', 'icon-256.png')
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch (e) {}
+  }
+  return undefined;
+}
 
 // 最近打开文件（在 app ready 后初始化）
 let recentList = [];
@@ -24,6 +36,8 @@ function pushRecent(p) {
 }
 
 function createWindow() {
+  const icon = appIconPath();
+
   win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -31,6 +45,8 @@ function createWindow() {
     minHeight: 420,
     show: false,
     backgroundColor: '#ffffff',
+    title: '轻墨',
+    icon: icon ? nativeImage.createFromPath(icon) : undefined,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -190,6 +206,16 @@ ipcMain.handle('fs:exportHtml', async (_e, html, suggestedName) => {
 ipcMain.handle('app:rebuildMenu', () => { buildMenu(); return recentList; });
 
 app.whenReady().then(() => {
+  // 任务栏 / Dock 图标（Windows 主要看这个）
+  const icon = appIconPath();
+  if (icon) {
+    try { app.setAppUserModelId('cn.bajiaolu.qingmo'); } catch (e) {}
+    try {
+      if (process.platform === 'win32') app.setIcon(nativeImage.createFromPath(icon));
+      if (process.platform === 'darwin') app.dock.setIcon(nativeImage.createFromPath(icon));
+    } catch (e) {}
+  }
+
   initRecent();
   buildMenu();
   createWindow();
