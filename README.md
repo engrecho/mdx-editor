@@ -48,12 +48,39 @@ npm start          # 开发运行
 ## 打包
 
 ```bash
-npm run pack:win    # Windows：NSIS 安装包 + 绿色便携版 → release/
-npm run pack:mac    # macOS：DMG（需在 mac 上执行）
-npm run pack        # 双平台
+npm run pack:win    # Windows：NSIS 安装包 + 绿色便携版 → release-v2/
+npm run pack:mac    # macOS DMG（必须在 mac 上执行）
+npm run pack        # 双平台（需 mac）
 ```
 
-产物位于 `release/` 目录。
+产物位于 `release-v2/` 目录。
+
+### macOS 交叉打包（在 Windows 上产出 mac zip）
+
+`.dmg` 必须用 macOS 的 `hdiutil`，无法交叉生成。但 **`.zip` 形式的 `.app` 可以**，
+本项目内置了一套纯 JS 管线绕过平台限制：
+
+```bash
+npm run mac:fetch    # 下载 Electron mac 运行时（npmmirror 镜像）
+npm run pack:mac-x   # 组装 MDX.app → 压缩 → release-v2/mac/
+```
+
+产出 `MDX-1.0.0-mac-arm64.zip`（Apple Silicon）与 `MDX-1.0.0-mac-x64.zip`（Intel）。
+
+原理与三个必须绕开的坑：
+
+| 限制 | 现象 | 应对 |
+| --- | --- | --- |
+| electron-builder 硬性检查 | `Build for macOS is supported only on macOS` | 不用它，手动组装 |
+| Windows 自带 tar 拒绝 mac zip | `This does not look like a tar archive` | 自写 `unzip.js` / `zip.js` 纯 JS 解压压缩 |
+| Node 的 `fs.cpSync` 在中文路径崩溃 | 进程被强杀，`0xC0000409` | 手写 `readdirSync` + `copyFileSync` 递归 |
+
+组装流程：解压官方 Electron 运行时 → 删 `default_app.asar` → 注入自己的 `app.asar`
+→ 重命名可执行文件为 `MDX` → 改 `Info.plist` 标识 → 压缩（保留 Unix 可执行位）。
+
+> **未签名**：产物没有 Apple 开发者签名。首次打开需右键选「打开」，
+> 或 `xattr -dr com.apple.quarantine /Applications/MDX.app`。
+> 如需免警告分发，得在 mac 上用 `codesign` + 公证（需付费开发者账号）。
 
 ## 技术栈
 
