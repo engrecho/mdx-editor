@@ -65,6 +65,30 @@ npm run pack        # 双平台
 | 打包 | esbuild（渲染层）+ electron-builder |
 | 前端 | 原生 JS + CSS 变量，无框架 |
 
+## 设计说明
+
+**图标**：全部为手写 SVG symbol（24 网格 / 1.6 描边 / 圆角端点），以 `<use href="#id">` 引用。
+不使用 emoji——emoji 依赖系统字体，在小尺寸下笔画粘连、视觉重量不均。
+
+**配色**：9 级中性色阶（`--c-0` ~ `--c-900`）+ 单一强调色 `--accent`。
+暗色主题只覆盖 CSS 变量，不改任何结构规则。
+
+**排版**：预览区 15.5px / 行高 1.85 / 左右 46px 留白；标题加负字距收紧字面；
+状态栏数字用 `font-variant-numeric: tabular-nums` 防跳动。
+
+**层级**：边框从重到轻为 `1px 分隔条` < `1px 边框` < `分组容器底色`。
+工具栏分组 hover 才显边框，常态降低视觉噪声。
+
+### 设计走查
+
+渲染层支持 `?shot=1&theme=light|dark` 参数，注入演示文档并强制主题，
+用于无头浏览器截图核对设计：
+
+```bash
+msedge --headless=new --screenshot=out.png --window-size=1440,900 \
+  "file:///path/to/index.html?shot=1&theme=dark"
+```
+
 ## 项目结构
 
 ```
