@@ -1,3 +1,7 @@
 node_modules/
 release/
 src/renderer/app.bundle.js
+_preview.html
+_shot.html
+_seed.js
+_clear.js

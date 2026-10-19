@@ -128,6 +128,7 @@ const state = EditorState.create({
 });
 
 const view = new EditorView({ state, parent: document.getElementById("editor") });
+window.__view = view;
 
 /* ============ 状态 ============ */
 let currentPath = null;
@@ -478,23 +479,69 @@ function run(cmd) {
 function exportHtml() {
   const css = `
     :root { color-scheme: light dark }
-    body { max-width: 780px; margin: 40px auto; padding: 0 24px;
-           font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-           line-height: 1.75; color: #1f2328; background: #fff }
-    h1,h2 { border-bottom: 1px solid #e3e6ea; padding-bottom: .3em }
-    h1 { font-size: 1.9em } h2 { font-size: 1.5em } h3 { font-size: 1.22em }
-    code { background: #f4f5f7; padding: .15em .38em; border-radius: 4px; font-size: .88em }
-    pre { background: #f4f5f7; padding: 14px 16px; border-radius: 6px; overflow-x: auto }
-    pre code { background: none; padding: 0 }
-    blockquote { margin: 1em 0; padding: .5em 1em; border-left: 3px solid #2f6feb; background: #f7f8fa; color: #656d76 }
-    table { border-collapse: collapse } th, td { border: 1px solid #e3e6ea; padding: 7px 13px }
-    th { background: #f7f8fa } hr { border: none; border-top: 1px solid #e3e6ea; margin: 2em 0 }
-    a { color: #2f6feb }
+    * { box-sizing: border-box }
+    body {
+      max-width: 760px; margin: 0 auto; padding: 64px 28px 96px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                   "Microsoft YaHei", sans-serif;
+      font-size: 16px; line-height: 1.85; color: #1a1d23; background: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3, h4, h5, h6 { font-weight: 650; line-height: 1.35; margin: 1.9em 0 .7em }
+    h1 { font-size: 1.95em; letter-spacing: -.02em }
+    h2 { font-size: 1.5em; padding-bottom: .35em; border-bottom: 1px solid #e4e7ec }
+    h3 { font-size: 1.24em } h4 { font-size: 1.06em }
+    p { margin: 0 0 1.15em }
+    a { color: #3b6ef0; text-decoration: none; border-bottom: 1px solid #c3d4fb }
+    a:hover { border-bottom-color: #3b6ef0 }
+    strong { font-weight: 700 }
+    code {
+      font-family: "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      font-size: .87em; padding: .18em .42em;
+      background: #eef0f3; border-radius: 5px;
+    }
+    pre {
+      margin: 1.4em 0; padding: 18px 20px; line-height: 1.7;
+      background: #fafbfc; border: 1px solid #e4e7ec;
+      border-radius: 10px; overflow-x: auto;
+    }
+    pre code { background: none; padding: 0; font-size: .86em; color: #3d4550 }
+    blockquote {
+      margin: 1.4em 0; padding: .7em 1.3em; color: #3d4550;
+      border-left: 3px solid #3b6ef0; background: #fafbfc;
+      border-radius: 0 7px 7px 0;
+    }
+    blockquote p:last-child { margin-bottom: 0 }
+    table {
+      border-collapse: separate; border-spacing: 0; width: 100%;
+      margin: 1.5em 0; font-size: .94em;
+      border: 1px solid #e4e7ec; border-radius: 7px; overflow: hidden;
+    }
+    th, td { padding: 10px 15px; border-bottom: 1px solid #e4e7ec; border-right: 1px solid #e4e7ec; text-align: left }
+    th:last-child, td:last-child { border-right: none }
+    tr:last-child td { border-bottom: none }
+    th { background: #f5f6f8; font-weight: 600; font-size: .95em; color: #3d4550 }
+    tbody tr:nth-child(even) { background: #fafbfc }
+    ul, ol { padding-left: 1.5em; margin: 0 0 1.15em }
+    li { margin: .35em 0 }
+    li::marker { color: #9aa3af }
+    li.task-list-item { list-style: none; margin-left: -1.5em }
+    input[type="checkbox"] { margin-right: .55em; accent-color: #3b6ef0; vertical-align: middle }
+    hr { margin: 2.6em 0; border: none; height: 1px; background: #e4e7ec }
+    img { max-width: 100%; border-radius: 7px }
+
     @media (prefers-color-scheme: dark) {
-      body { background: #16181d; color: #e3e6eb }
-      h1,h2,hr { border-color: #2a2f38 }
-      code, pre { background: #21252d } th { background: #1c2027 }
-      th, td { border-color: #2a2f38 } blockquote { background: #1c2027; color: #9aa4b2 }
+      body { background: #16181c; color: #e9edf3 }
+      h2, hr { border-color: #2b3038 }
+      code { background: #23272e }
+      pre { background: #191c21; border-color: #2b3038 }
+      pre code { color: #c8cfd9 }
+      blockquote { background: #191c21; color: #c8cfd9; border-left-color: #5b8cff }
+      table, th, td { border-color: #2b3038 }
+      th { background: #1d2127; color: #c8cfd9 }
+      tbody tr:nth-child(even) { background: #191c21 }
+      a { color: #5b8cff; border-bottom-color: #2f4470 }
+      li::marker { color: #79828f }
     }`;
   const title = currentPath ? currentPath.split(/[\\/]/).pop() : 'untitled';
   const html = `<!DOCTYPE html>
@@ -515,7 +562,7 @@ function escapeHtml(s) {
 const panes = document.getElementById("panes");
 function setMode(mode) {
   panes.dataset.mode = mode;
-  document.querySelectorAll('.tb.seg').forEach(b => b.classList.toggle('active', b.dataset.view === mode));
+  document.querySelectorAll('#segbar .seg').forEach(b => b.classList.toggle('active', b.dataset.view === mode));
   localStorage.setItem('mdx.mode', mode);
   requestAnimationFrame(() => { view.requestMeasure(); if (mode !== 'preview') renderPreview(); });
 }
@@ -566,7 +613,7 @@ function toast(msg) {
 })();
 
 /* ============ 事件绑定 ============ */
-document.getElementById("toolbar").addEventListener("click", e => {
+document.getElementById("titlebar").addEventListener("click", e => {
   const btn = e.target.closest('[data-cmd]');
   if (btn) { run(btn.dataset.cmd); return; }
   const seg = e.target.closest('[data-view]');
@@ -622,3 +669,23 @@ loadDraft();
 renderPreview();
 updateStatus();
 view.focus();
+
+/* 设计走查用：?shot=1&theme=light|dark 注入演示文档并置顶主题 */
+(function designPreview() {
+  let q;
+  try { q = new URLSearchParams(location.search); } catch (e) { return; }
+  if (q.get('shot') !== '1') return;
+  setTheme(q.get('theme') === 'dark' ? 'dark' : 'light');
+  const seed = window.__SEED_DOC__;
+  if (seed) {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: seed } });
+    setDirty(false);
+    clearDraft();
+  }
+  const f = document.getElementById('fileName');
+  if (f) f.textContent = '产品需求文档.md';
+  const p = document.getElementById('stPath');
+  if (p) p.textContent = '/Users/jaylon/Documents/产品需求文档.md · 行 1, 列 1';
+  renderPreview();
+  updateStatus();
+})();

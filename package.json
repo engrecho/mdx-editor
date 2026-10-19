@@ -48,15 +48,13 @@
       "target": [
         "nsis",
         "portable"
-      ],
-      "icon": "build/icon.ico"
+      ]
     },
     "mac": {
       "target": [
-        "dmg"
+        "zip"
       ],
-      "category": "public.app-category.productivity",
-      "icon": "build/icon.icns"
+      "category": "public.app-category.productivity"
     },
     "nsis": {
       "oneClick": false,
