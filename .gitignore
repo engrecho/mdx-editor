@@ -1,6 +1,7 @@
 node_modules/
 build-output/
 dist/
+.cache/
 _archive/
 release/
 release-v2/
@@ -13,9 +14,6 @@ src/renderer/_preview.html
 src/renderer/_shot.html
 src/renderer/_seed.js
 src/renderer/_clear.js
-
-# 运行时缓存
-.cache/
 
 # 系统
 .DS_Store
