@@ -291,7 +291,8 @@ function compareVersion(a, b) {
 
 /** 在系统浏览器打开下载页 */
 ipcMain.handle('app:openExternal', async (_e, url) => {
-  if (typeof url === 'string' && /^https:///////.test(url)) {
+  // 只允许 http(s)，防止渲染层传入 file:// / javascript: 之类的协议
+  if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
     await shell.openExternal(url);
     return true;
   }

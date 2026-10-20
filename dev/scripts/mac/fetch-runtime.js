@@ -11,14 +11,39 @@ const { execFileSync } = require('child_process');
 
 const log = (...a) => console.error(util.format(...a));
 
-const VER = process.argv[2] ||
-  JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'))
-    .devDependencies.electron.replace(/[\^~]/g, '');
+/**
+ * 解析要下载的 Electron 版本。
+ *
+ * 必须用**实际安装的版本**，而不是 package.json 里写的 semver 范围。
+ * 之前写成 devDependencies.electron.replace(/[\^~]/g, '')，得到的是
+ * "33.0.0"（范围的下界），但 npm 实际装的是 33.4.11 —— 镜像上
+ * 没有 33.0.0 的 darwin 包，下载必然失败。
+ */
+function resolveVersion() {
+  if (process.argv[2]) return process.argv[2];
+  // 优先读 node_modules 里真实装的版本
+  try {
+    const p = path.join(__dirname, '..', '..', 'node_modules', 'electron', 'package.json');
+    if (fs.existsSync(p)) {
+      const v = JSON.parse(fs.readFileSync(p, 'utf-8')).version;
+      if (v) return v;
+    }
+  } catch (e) {}
+  // 退化：读 package.json 的 semver 范围
+  const range = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8')
+  ).devDependencies.electron;
+  return range.replace(/[\^~]/g, '');
+}
+
+const VER = resolveVersion();
 // 运行时缓存放在项目内 .cache/，已 gitignore
 // 删掉后重新执行 npm run mac:fetch 即可再下载
 const CACHE = path.join(__dirname, '..', '..', '..', '.cache', 'electron-mac');
 const ARCHES = ['arm64', 'x64'];
 const MIRRORS = [
+  // 注意路径格式：npmmirror 的 electron 镜像需要带版本号子目录，
+  // 即 {base}/{version}/{file}。旧的不带版本号的路径一律 404。
   'https://npmmirror.com/mirrors/electron/',
   'https://cdn.npmmirror.com/binaries/electron/'
 ];
@@ -33,14 +58,28 @@ for (const arch of ARCHES) {
   }
   const name = `electron-v${VER}-darwin-${arch}.zip`;
   let ok = false;
+  // 依次尝试多种 URL 组合：
+  //   ① {base}/{version}/{file}   ← npmmirror 现行格式
+  //   ② {base}/{file}             ← 旧格式（部分镜像仍支持）
+  //   ③ GitHub 官方 release       ← 兜底，国内可能慢
+  const candidates = [];
   for (const m of MIRRORS) {
-    log('下载 %s ...', m + name);
+    candidates.push(m + VER + '/' + name);
+    candidates.push(m + name);
+  }
+  candidates.push(
+    `https://github.com/electron/electron/releases/download/v${VER}/${name}`
+  );
+
+  for (const url of candidates) {
+    log('下载 %s ...', url);
     try {
-      execFileSync('curl', ['-sL', '--max-time', '600', '-o', file, m + name],
-        { stdio: 'inherit', timeout: 660000 });
+      execFileSync('curl', ['-sL', '--max-time', '900', '-o', file, url],
+        { stdio: 'inherit', timeout: 960000 });
       const sz = fs.statSync(file).size;
       if (sz > 50 * 1024 * 1024) {
-        log('OK %s (%.1f MB)', path.basename(file), sz / 1048576);
+        // 注意：util.format 不支持 printf 风格的 %f，必须自己算好再传
+        log('OK %s (%s MB)', path.basename(file), (sz / 1048576).toFixed(1));
         ok = true;
         break;
       }

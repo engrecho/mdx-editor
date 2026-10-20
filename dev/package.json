@@ -20,7 +20,8 @@
     "gen:icons": "node scripts/gen-icons.js && node scripts/make-ico.js",
     "publish:win": "node scripts/publish.js win",
     "publish:mac": "node scripts/publish.js mac",
-    "publish": "node scripts/publish.js all"
+    "publish": "node scripts/publish.js all",
+    "verify:asar": "node scripts/verify-asar.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",

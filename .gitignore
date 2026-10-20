@@ -16,12 +16,16 @@ release-v2/
 _to_delete/
 
 # 图标生成产物
-# 注意：icon.icns / icon.ico 是打包的【必需输入】，必须入库。
+# 注意：icon.icns / icon.ico / icon-256.png 是打包的【必需输入】，必须入库。
+#  - icon.icns  ：macOS 打包的图标
+#  - icon.ico   ：Windows 打包的图标
+#  - icon-256.png：package.json 的 extraResources 会把它拷进应用
 # gen-icons.js 依赖 Windows 的 Edge 生成 PNG，Mac 上跑不了，
-# 所以这两份预生成产物要随仓库分发，否则 Mac clone 后打包会因缺图标失败。
-# 其余尺寸的 PNG 与 base64 仅供 Windows 使用，不入库。
+# 所以这些预生成产物要随仓库分发，否则 clone 后打包会因缺图标失败。
+# 其余尺寸的 PNG 与 base64 仅供 Windows 内部使用，不入库。
 dev/build/icons/icon-*.png
 dev/build/icons/*.base64.txt
+!dev/build/icons/icon-256.png
 
 # 渲染层 esbuild 产物
 dev/src/renderer/app.bundle.js
