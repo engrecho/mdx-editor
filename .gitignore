@@ -5,6 +5,7 @@ dev/node_modules/
 .cache/
 build-output/
 build-out-*/
+win-build-*/
 out-*/
 dist-out/
 dist/
