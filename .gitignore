@@ -2,6 +2,8 @@
 dev/node_modules/
 
 # 构建缓存与中间产物
+# build-output 是历史遗留目录名，build-out 才是当前输出目录
+build-output/
 .cache/
 build-out/
 build-out-*/
