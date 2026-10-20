@@ -216,12 +216,16 @@ npm run build:renderer
 | `npm start` | 启动应用 |
 | `npm run build:renderer` | 打包渲染层（app.js + update.js） |
 | `npm run pack:win` | 打包 Windows（安装版 + 便携版） |
+| `npm run pack:win:safe` | 打包 Windows，**自动避开被占用的输出目录**（推荐） |
 | `npm run pack:mac` | 打包 macOS（**需在 Mac 上执行**，出 .dmg + .zip） |
+| `npm run pack:mac:safe` | 打包 macOS，自动避开被占用的输出目录 |
 | `npm run pack:mac:dmg` | 只打 macOS dmg |
 | `npm run pack:mac:zip` | 只打 macOS zip |
 | `npm run pack:mac-x` | 交叉打包 macOS zip（可在 Windows 执行） |
 | `npm run mac:fetch` | 下载 Electron mac 运行时 |
 | `npm run gen:icons` | 从 logo.svg 生成全套图标 |
+| `npm run publish` | 把产物同步到 `release/` |
+| `npm run verify:asar -- <asar路径>` | 校验包内 main.js 的语法与正则 |
 | `npm run cache:clean` | 清理构建缓存（`-- --all` 连运行时一起清） |
 | `npm run publish` | 把产物同步到 `release/` |
 | `npm run release` | 发布 GitHub Release |

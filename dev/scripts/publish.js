@@ -23,6 +23,19 @@ const ROOT = path.join(DEV, '..');
 const OUT_CANDIDATES = ['build-out', 'build-output', 'build-out-win', 'dist-out']
   .map(d => path.join(ROOT, d));
 
+/**
+ * 追加动态选出的输出目录。
+ *
+ * pick-output.js 会在打包前探测目录是否被占用（这台机器上有个常驻
+ * Electron 程序会独占打开 .asar），被占用时它会选一个带时间戳的新目录。
+ * 这个文件由 pick-output.js 写入。
+ */
+const picked = path.join(ROOT, '.cache', 'busy-check.txt');
+if (fs.existsSync(picked)) {
+  const p = fs.readFileSync(picked, 'utf-8').trim();
+  if (p && fs.existsSync(p) && !OUT_CANDIDATES.includes(p)) OUT_CANDIDATES.unshift(p);
+}
+
 /** 从候选目录里挑出版本号最高的文件（只保留最高版本的一批） */
 function pickNewest(ext) {
   const found = new Map();   // name -> {path, ver}
