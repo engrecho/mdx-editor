@@ -7,6 +7,13 @@ Windows / macOS 双端运行，支持实时预览、快捷插入、多标签与�
 **仓库**：[github.com/engrecho/qingmo](https://github.com/engrecho/qingmo)
 **版本**：v1.2.1
 
+> [!IMPORTANT]
+> **如果本仓库位于云盘同步目录（路径里带「云电脑同步」「OneDrive」「坚果云」等），**
+> 云盘客户端会独占锁住 `.asar` 文件，导致打包报
+> `The process cannot access the file because it is being used by another process`。
+> 解决办法：把项目移到普通本地目录，或用 `npm run pack:win:safe` 打包。
+> 详见 [`docs/开发指南.md`](docs/开发指南.md) 的「本机环境坑位」第 9 条。
+
 ---
 
 ## 目录结构
