@@ -82,27 +82,35 @@ function request(method, apiPath, { body, headers = {}, raw } = {}) {
   });
 }
 
-/** 上传单个 asset（GitHub 需要特殊 upload URL） */
-function uploadAsset(uploadUrl, filePath, name) {
+/**
+ * 上传单个 asset
+ *
+ * 注意：不要走「先 POST 创建资产元数据，再 PUT 上传」两步流程 ——
+ * 实测第二步的 POST /repos/{repo}/releases/{id}/assets 返回 404。
+ * 直接 POST 到 uploads.github.com 一步到位即可。
+ */
+function uploadAsset(releaseId, filePath, name, label, token) {
   return new Promise((resolve, reject) => {
     const stat = fs.statSync(filePath);
-    const url = new URL(uploadUrl);
+    const url = `https://uploads.github.com/repos/${REPO}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}&label=${encodeURIComponent(label || '')}`;
     const opts = {
-      hostname: url.hostname,
-      path: url.pathname + url.search,
-      method: 'PUT',
+      hostname: 'uploads.github.com',
+      path: url.replace('https://uploads.github.com', ''),
+      method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
         'Content-Length': stat.size,
-        'User-Agent': 'QingMo-Release'
+        'User-Agent': 'QingMo-Release',
+        'Authorization': `Bearer ${token}`
       }
     };
     const req = https.request(opts, res => {
       const chunks = [];
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf-8');
         if (res.statusCode >= 200 && res.statusCode < 300) resolve(true);
-        else reject(new Error(`上传 ${name} 失败: HTTP ${res.statusCode} ${Buffer.concat(chunks).toString().slice(0, 200)}`));
+        else reject(new Error(`上传 ${name} 失败: HTTP ${res.statusCode} ${body.slice(0, 200)}`));
       });
     });
     req.on('error', reject);
@@ -121,21 +129,46 @@ async function main() {
   const auth = { Authorization: `Bearer ${token}` };
 
   // 1. 收集要上传的文件
+  //
+  // 重要：GitHub 会把非 ASCII 文件名截断（'轻墨 Setup 1.2.0.exe' → 'Setup.1.2.0.exe'），
+  // 所以上传时统一用 ASCII 文件名，中文说明放在 label 里。
   const assets = [];
-  const collect = (dir, prefix) => {
+  const asciiName = (name) => {
+    const m = name.match(/(\d+\.\d+\.\d+)/);
+    const ver = m ? m[1] : '';
+    if (/mac.*arm64/i.test(name)) return `QingMo-${ver}-mac-arm64.zip`;
+    if (/mac.*x64/i.test(name)) return `QingMo-${ver}-mac-x64.zip`;
+    if (/setup/i.test(name)) return `QingMo-${ver}-win-setup.exe`;
+    if (name.endsWith('.exe')) return `QingMo-${ver}-win-portable.exe`;
+    return name.replace(/[^\x20-\x7E]/g, '_');
+  };
+  const labelOf = (name) => {
+    if (/mac.*arm64/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Apple 芯片)';
+    if (/mac.*x64/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Intel)';
+    if (/setup/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' Windows 安装版';
+    if (name.endsWith('.exe')) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' Windows 便携版';
+    return name;
+  };
+
+  const collect = (dir) => {
     if (!fs.existsSync(dir)) return;
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
         // portable/ 目录太大，只上传其中的 exe
         if (e.name === 'portable') continue;
-        collect(full, prefix);
+        collect(full);
       } else if (e.name.endsWith('.exe') || e.name.endsWith('.zip')) {
-        assets.push({ path: full, name: e.name, size: fs.statSync(full).size });
+        assets.push({
+          path: full,
+          name: asciiName(e.name),
+          label: labelOf(e.name),
+          size: fs.statSync(full).size
+        });
       }
     }
   };
-  collect(ASSET_DIR, '');
+  collect(ASSET_DIR);
 
   if (!assets.length) {
     log('X 在 %s 下没找到可上传的 .exe / .zip', ASSET_DIR);
@@ -172,11 +205,7 @@ async function main() {
       log('  跳过（已存在）:', a.name);
       continue;
     }
-    const created = await request('POST', `/repos/${REPO}/releases/${release.id}/assets?name=${encodeURIComponent(a.name)}`, {
-      headers: auth,
-      body: { name: a.name, label: a.name }
-    });
-    await uploadAsset(created.upload_url, a.path, a.name);
+    await uploadAsset(release.id, a.path, a.name, a.label, token);
     log('  ✓', a.name);
   }
 

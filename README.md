@@ -282,6 +282,7 @@ msedge --headless=new --screenshot=out.png --window-size=1440,900 \
 | [`docs/开发指南.md`](docs/开发指南.md) | 开发者 —— 架构、打包、踩坑记录 |
 | [`docs/Windows使用说明.md`](docs/Windows使用说明.md) | Windows 用户 —— 安装与卸载 |
 | [`docs/macOS使用说明.md`](docs/macOS使用说明.md) | macOS 用户 —— 安装、芯片选择、签名 |
+| [`docs/macOS打包指南.md`](docs/macOS打包指南.md) | 打包者 —— 三种打包方案、签名公证、损坏排查 |
 
 ---
 
