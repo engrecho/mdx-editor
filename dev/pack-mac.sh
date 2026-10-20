@@ -6,7 +6,7 @@
 #   ./dev/pack-mac.sh --both       同时打 arm64 和 x64
 #   ./dev/pack-mac.sh --dmg        只打 dmg 安装包
 #
-# 产物位置：build-output/mac/
+# 产物位置：build-out/mac/
 
 set -e
 
@@ -56,8 +56,8 @@ case "${1:-}" in
 esac
 
 echo
-echo "==> 打包完成，产物在 build-output/mac/"
-ls -lh build-output/mac/
+echo "==> 打包完成，产物在 build-out/mac/"
+ls -lh build-out/mac/
 
 cat <<'EOF'
 

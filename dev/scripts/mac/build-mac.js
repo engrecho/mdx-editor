@@ -32,7 +32,7 @@ const DEV = path.join(__dirname, '..', '..');
 const ROOT = path.join(DEV, '..');   // 仓库根
 const CACHE = path.join(ROOT, '.cache', 'electron-mac');
 const TMP = path.join(ROOT, '.cache', 'mac-build');
-const OUT = path.join(ROOT, 'build-out-121', 'mac');
+const OUT = path.join(ROOT, 'build-out', 'mac');
 const ARCHES = ['arm64', 'x64'];
 
 // @electron/asar 是 ESM-only，唯一可靠入口是 CLI

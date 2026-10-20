@@ -20,7 +20,7 @@ const DEV = path.join(__dirname, '..');
 const ROOT = path.join(DEV, '..');
 // 候选输出目录：electron-builder 的 directories.output 历史上被改过几次，
 // 且各目录里可能残留不同版本的产物。所以按「版本号取最新」而不是「按目录顺序」。
-const OUT_CANDIDATES = ['build-out-121', 'build-output', 'build-out-win', 'dist-out']
+const OUT_CANDIDATES = ['build-out', 'build-output', 'build-out-win', 'dist-out']
   .map(d => path.join(ROOT, d));
 
 /** 从候选目录里挑出版本号最高的文件（只保留最高版本的一批） */
@@ -108,20 +108,27 @@ if (target === 'win' || target === 'all') {
   const winDir = path.join(REL, 'windows');
   fs.mkdirSync(winDir, { recursive: true });
 
-  // 清掉旧版本文件（挪走而非删除：删除操作会被环境安全 hook 拦截）
-  const oldExes = path.join(ROOT, '_to_delete', 'publish-old-exe-' + Date.now());
-  for (const f of fs.existsSync(winDir) ? fs.readdirSync(winDir) : []) {
-    if (!f.endsWith('.exe')) continue;
-    try {
-      fs.mkdirSync(oldExes, { recursive: true });
-      fs.renameSync(path.join(winDir, f), path.join(oldExes, f));
-    } catch (e) { log('  ⚠ 旧 exe 挪动失败:', f); }
-  }
-
   // exe：取版本号最新的
-  for (const a of pickNewest('.exe')) {
-    fs.copyFileSync(a.path, path.join(winDir, path.basename(a.path)));
-    log('  ✓', path.basename(a.path));
+  //
+  // 顺序：先挑出新的，确认有货了再挪走旧的。
+  // 否则一旦候选目录里没有新产物，旧的被挪走而新的拷不上，目录就空了。
+  const newExes = pickNewest('.exe');
+  if (!newExes.length) {
+    log('  ⚠ 没找到新的 exe，保留 release/windows/ 现有内容不动');
+  } else {
+    // 清掉旧版本文件（挪走而非删除：删除操作会被环境安全 hook 拦截）
+    const oldExes = path.join(ROOT, '_to_delete', 'publish-old-exe-' + Date.now());
+    for (const f of fs.existsSync(winDir) ? fs.readdirSync(winDir) : []) {
+      if (!f.endsWith('.exe')) continue;
+      try {
+        fs.mkdirSync(oldExes, { recursive: true });
+        fs.renameSync(path.join(winDir, f), path.join(oldExes, f));
+      } catch (e) { log('  ⚠ 旧 exe 挪动失败:', f); }
+    }
+    for (const a of newExes) {
+      fs.copyFileSync(a.path, path.join(winDir, path.basename(a.path)));
+      log('  ✓', path.basename(a.path));
+    }
   }
 
   // 免安装目录版：找版本号最新的 win-unpacked
@@ -140,10 +147,19 @@ if (target === 'win' || target === 'all') {
   }
   if (best) {
     const dst = path.join(winDir, 'portable');
-    // 旧目录先挪走再拷新，避免旧版本文件混进新包
-    moveAway(dst);
-    copyDir(best.src, dst);
-    log('  ✓ portable/ (v' + best.ver.join('.') + ')');
+    // 先把新内容拷进一个临时目录，确认成功再换过去。
+    // 直接 moveAway 旧目录的话，一旦目录改名被 Windows 拒绝
+    // （内含被占用的文件），旧内容会留在原地，和新内容混在一起。
+    const staging = path.join(ROOT, '_to_delete', 'portable-staging-' + Date.now());
+    try {
+      copyDir(best.src, staging);
+      // 用「逐文件覆盖」而不是换目录：换目录可能被 Windows 拒绝
+      fs.mkdirSync(dst, { recursive: true });
+      copyDir(staging, dst);
+      log('  ✓ portable/ (v' + best.ver.join('.') + ')');
+    } catch (e) {
+      log('  ⚠ portable 同步失败:', e.message);
+    }
   }
 }
 
@@ -151,19 +167,27 @@ if (target === 'mac' || target === 'all') {
   log('同步 macOS...');
   const macDir = path.join(REL, 'macos');
   fs.mkdirSync(macDir, { recursive: true });
-  const oldZips = path.join(ROOT, '_to_delete', 'publish-old-zip-' + Date.now());
-  for (const f of fs.existsSync(macDir) ? fs.readdirSync(macDir) : []) {
-    if (!f.endsWith('.zip')) continue;
-    try {
-      fs.mkdirSync(oldZips, { recursive: true });
-      fs.renameSync(path.join(macDir, f), path.join(oldZips, f));
-    } catch (e) { log('  ⚠ 旧 zip 挪动失败:', f); }
-  }
   // mac zip：取版本号最新的
+  //
+  // 顺序很重要：先挑出新的，确认有货了再挪走旧的。
+  // 反过来的话，一旦候选目录里没有新产物（比如刚改了输出目录），
+  // 旧的会被挪走而新的拷不上，release/macos 就空了。
   const macZips = pickNewest('.zip');
-  for (const a of macZips) {
-    fs.copyFileSync(a.path, path.join(macDir, path.basename(a.path)));
-    log('  ✓', path.basename(a.path));
+  if (!macZips.length) {
+    log('  ⚠ 没找到新的 mac zip，保留 release/macos/ 现有内容不动');
+  } else {
+    const oldZips = path.join(ROOT, '_to_delete', 'publish-old-zip-' + Date.now());
+    for (const f of fs.existsSync(macDir) ? fs.readdirSync(macDir) : []) {
+      if (!f.endsWith('.zip')) continue;
+      try {
+        fs.mkdirSync(oldZips, { recursive: true });
+        fs.renameSync(path.join(macDir, f), path.join(oldZips, f));
+      } catch (e) { log('  ⚠ 旧 zip 挪动失败:', f); }
+    }
+    for (const a of macZips) {
+      fs.copyFileSync(a.path, path.join(macDir, path.basename(a.path)));
+      log('  ✓', path.basename(a.path));
+    }
   }
 }
 

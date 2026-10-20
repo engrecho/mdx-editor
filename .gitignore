@@ -3,7 +3,7 @@ dev/node_modules/
 
 # 构建缓存与中间产物
 .cache/
-build-output/
+build-out/
 build-out-*/
 win-build-*/
 out-*/

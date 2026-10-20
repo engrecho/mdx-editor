@@ -5,7 +5,7 @@
 Windows / macOS 双端运行，支持实时预览、快捷插入、多标签与自动更新检测。
 
 **仓库**：[github.com/engrecho/qingmo](https://github.com/engrecho/qingmo)
-**版本**：v1.2.0
+**版本**：v1.2.1
 
 ---
 
@@ -45,34 +45,42 @@ qingmo/
 │
 ├── release/                 ← 【发布目录】拿去用，别改
 │   ├── windows/                Windows 安装版 + 便携版
-│   │   ├── 轻墨 Setup 1.2.0.exe
-│   │   ├── 轻墨 1.2.0.exe
+│   │   ├── 轻墨 Setup 1.2.1.exe
+│   │   ├── 轻墨 1.2.1.exe
 │   │   ├── portable/              免安装目录版
 │   │   └── 说明.md
 │   ├── macos/                  macOS 双架构 zip
-│   │   ├── QingMo-1.2.0-mac-arm64.zip
-│   │   ├── QingMo-1.2.0-mac-x64.zip
+│   │   ├── QingMo-1.2.1-mac-arm64.zip
+│   │   ├── QingMo-1.2.1-mac-x64.zip
 │   │   └── 说明.md
+│   └── README.md
+│
+├── build-out/               ← 【构建产物】打包时自动生成，可随时删
+│   ├── win-unpacked/            免安装目录版的源
+│   └── mac/                     macOS zip 的源
 │
 ├── docs/                    ← 【文档】
 │   ├── 使用手册.md             给使用者：快捷键、语法、技巧、FAQ
 │   ├── 开发指南.md             给开发者：架构、打包、踩坑
 │   ├── Windows使用说明.md
-│   └── macOS使用说明.md
+│   ├── macOS使用说明.md
+│   └── macOS打包指南.md
 │
 ├── _to_delete/              ← 【待删除暂存区】无用产物已挪进这里，确认后可整目录删除
 │
 ├── .gitignore
+├── .gitattributes
 ├── RELEASE_NOTES.md         发布说明
 └── README.md
 ```
 
-**两类目录的区别**：
+**三类目录的区别**：
 
 | 目录 | 性质 | 你要做什么 |
 | --- | --- | --- |
 | `dev/` | 开发 | 想改功能才动，需要 Node 环境 |
 | `release/` | 发布 | 直接使用，或交给别人 |
+| `build-out/` | 构建产物 | 打包时自动生成，不需要手动管，可随时删 |
 
 ---
 
@@ -84,16 +92,16 @@ qingmo/
 
 | 文件 | 说明 |
 | --- | --- |
-| `轻墨 Setup 1.2.0.exe` | **安装版**（推荐）。双击安装，可选目录，创建桌面快捷方式 |
-| `轻墨 1.2.0.exe` | 单文件版。免安装，但**首次启动要等 5-10 秒**（内部要解压） |
+| `轻墨 Setup 1.2.1.exe` | **安装版**（推荐）。双击安装，可选目录，创建桌面快捷方式 |
+| `轻墨 1.2.1.exe` | 单文件版。免安装，但**首次启动要等 5-10 秒**（内部要解压） |
 | `portable/轻墨.exe` | 免安装目录版。**双击立即启动**，整个文件夹一起复制 |
 
 **macOS**
 
 | 文件 | 适用机型 |
 | --- | --- |
-| `QingMo-1.2.0-mac-arm64.zip` | Apple Silicon（M1/M2/M3/M4）—— 大多数人选这个 |
-| `QingMo-1.2.0-mac-x64.zip` | Intel 芯片 |
+| `QingMo-1.2.1-mac-arm64.zip` | Apple Silicon（M1/M2/M3/M4）—— 大多数人选这个 |
+| `QingMo-1.2.1-mac-x64.zip` | Intel 芯片 |
 
 macOS **首次必须右键点击 → 打开**（未签名，Gatekeeper 会拦截）。详见
 [`docs/macOS使用说明.md`](docs/macOS使用说明.md)。
@@ -119,7 +127,7 @@ cd qingmo
 ```
 
 脚本会自动检查 Node 版本（需 18+）、装依赖、检查图标，然后出 dmg。
-产物在 `build-output/mac/`，双击 dmg 挂载，把「轻墨」拖进 Applications 即可。
+产物在 `build-out/mac/`，双击 dmg 挂载，把「轻墨」拖进 Applications 即可。
 
 手动等价命令：
 
@@ -229,7 +237,7 @@ npm run pack:win
 npm run publish:win
 
 # 3. 发布
-node scripts/release.js --tag v1.2.0 --notes-file ../RELEASE_NOTES.md
+node scripts/release.js --tag v1.2.1 --notes-file ../RELEASE_NOTES.md
 ```
 
 脚本会：创建 Release（已存在则复用）→ 上传 `release/` 下的所有 `.exe` / `.zip`
@@ -304,4 +312,4 @@ msedge --headless=new --screenshot=out.png --window-size=1440,900 \
 
 ---
 
-**轻墨 QingMo** · v1.2.0 · MIT License
+**轻墨 QingMo** · v1.2.1 · MIT License
