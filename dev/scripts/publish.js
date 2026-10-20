@@ -20,7 +20,7 @@ const DEV = path.join(__dirname, '..');
 const ROOT = path.join(DEV, '..');
 // 候选输出目录：electron-builder 的 directories.output 历史上被改过几次，
 // 且各目录里可能残留不同版本的产物。所以按「版本号取最新」而不是「按目录顺序」。
-const OUT_CANDIDATES = ['build-output', 'build-out-win', 'dist-out']
+const OUT_CANDIDATES = ['build-out-121', 'build-output', 'build-out-win', 'dist-out']
   .map(d => path.join(ROOT, d));
 
 /** 从候选目录里挑出版本号最高的文件（只保留最高版本的一批） */
