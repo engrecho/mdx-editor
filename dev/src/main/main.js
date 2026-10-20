@@ -150,6 +150,14 @@ function buildMenu() {
         { role: 'toggleDevTools', label: '开发者工具' },
         { role: 'togglefullscreen', label: '全屏' }
       ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        { label: '检查更新…', click: send('app:checkUpdate') },
+        { type: 'separator' },
+        { label: '关于轻墨', click: send('app:about') }
+      ]
     }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -204,6 +212,91 @@ ipcMain.handle('fs:exportHtml', async (_e, html, suggestedName) => {
 });
 
 ipcMain.handle('app:rebuildMenu', () => { buildMenu(); return recentList; });
+
+// 同步取版本号（渲染层启动时用）
+ipcMain.on('app:getVersion', (e) => { e.returnValue = app.getVersion(); });
+
+/* ============ 版本更新检测 ============ */
+// 从 GitHub Releases 拉取最新版本信息
+// 接口：GET https://api.github.com/repos/{owner}/{repo}/releases/latest
+const UPDATE_REPO = 'engrecho/qingmo';
+const UPDATE_API = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+
+ipcMain.handle('app:checkUpdate', async () => {
+  const current = app.getVersion();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(UPDATE_API, {
+      signal: ctrl.signal,
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'QingMo-Update-Check'
+      }
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      return { ok: false, current, error: `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    const latest = String(data.tag_name || '').replace(/^v/i, '');
+    if (!latest) return { ok: false, current, error: '未解析到版本号' };
+
+    // 找当前平台的资源
+    const isMac = process.platform === 'darwin';
+    const isArm = process.arch === 'arm64';
+    const assets = (data.assets || []).map(a => ({
+      name: a.name,
+      size: a.size,
+      url: a.browser_download_url
+    }));
+
+    // 优先匹配当前平台
+    let match = null;
+    if (isMac) {
+      match = assets.find(a => /mac.*(arm64|x64)/i.test(a.name) && (isArm ? /arm64/i.test(a.name) : /x64/i.test(a.name)))
+             || assets.find(a => /mac/i.test(a.name));
+    } else if (process.platform === 'win32') {
+      match = assets.find(a => /\.exe$/i.test(a.name) && /setup/i.test(a.name))
+             || assets.find(a => /\.exe$/i.test(a.name));
+    }
+
+    return {
+      ok: true,
+      current,
+      latest,
+      hasUpdate: compareVersion(latest, current) > 0,
+      releaseUrl: data.html_url,
+      releaseName: data.name,
+      notes: (data.body || '').slice(0, 2000),
+      publishedAt: data.published_at,
+      assets,
+      match
+    };
+  } catch (e) {
+    return { ok: false, current, error: e.name === 'AbortError' ? '请求超时' : e.message };
+  }
+});
+
+/** 语义化版本比较：a > b 返回正数 */
+function compareVersion(a, b) {
+  const pa = String(a).split('.').map(x => parseInt(x, 10) || 0);
+  const pb = String(b).split('.').map(x => parseInt(x, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+/** 在系统浏览器打开下载页 */
+ipcMain.handle('app:openExternal', async (_e, url) => {
+  if (typeof url === 'string' && /^https:///////.test(url)) {
+    await shell.openExternal(url);
+    return true;
+  }
+  return false;
+});
 
 app.whenReady().then(() => {
   // 任务栏 / Dock 图标（Windows 主要看这个）

@@ -34,7 +34,28 @@ function walk(root, base, out) {
     const fp = path.join(root, e.name);
     const rel = base ? base + '/' + e.name : e.name;
     if (e.isDirectory()) walk(fp, rel, out);
-    else if (e.isFile()) out.push({ abs: fp, name: rel });
+    else if (e.isSymbolicLink()) {
+      // 符号链接必须单独存：mac 的 .app 框架结构（Versions/Current 等）全靠它
+      out.push({ abs: fp, name: rel, link: fs.readlinkSync(fp) });
+    } else if (e.isFile() && e.name.endsWith('.__symlink')) {
+      // Windows 无法创建符号链接时 unzip.js 留下的标记：
+      // 链接目标写在同名普通文件里，这里读回来按链接写进 zip
+      const linkPath = fp.slice(0, -'.__symlink'.length);
+      let target = '';
+      try { target = fs.readFileSync(linkPath, 'utf-8').trim(); } catch (err) {}
+      if (target) {
+        out.push({
+          abs: linkPath,
+          name: rel.slice(0, -'.__symlink'.length),
+          link: target,
+          fromMarker: true
+        });
+      }
+    } else if (e.isFile()) {
+      // 标记对应的普通文件不再单独收录（已由标记条目代表）
+      if (e.name.endsWith('.__symlink')) continue;
+      out.push({ abs: fp, name: rel, mode: fs.statSync(fp).mode & 0o777 });
+    }
   }
 }
 
@@ -47,22 +68,34 @@ function zipDir(srcDir, outZip) {
   let offset = 0;
 
   for (const f of files) {
-    const data = fs.readFileSync(f.abs);
-    const comp = zlib.deflateRawSync(data, { level: 6 });
     const nameBuf = Buffer.from(f.name, 'utf8');
-    const crc = crc32(data);
+    const isLink = typeof f.link === 'string';
 
-    // .app 内的可执行文件与 framework 二进制需保留可执行位
-    const isExec = /\/(MacOS\/[^/]+|[^/]+\.(dylib|so))$/.test(f.name) ||
-                   /\/Electron Helper[^/]*$/.test(f.name) ||
-                   /\/Frameworks\/[^/]+\/Versions\/[^/]+\/[^/]+$/.test(f.name);
-    const mode = isExec ? 0o755 : 0o644;
+    // 符号链接：内容是链接目标，method=stored，外部属性带 S_IFLNK
+    let data, comp, crc, method, mode;
+    if (isLink) {
+      data = Buffer.from(f.link, 'utf8');
+      comp = data;
+      crc = crc32(data);
+      method = 0;                       // stored
+      mode = 0o777 | 0xa000;            // S_IFLNK | rwxrwxrwx
+    } else {
+      data = fs.readFileSync(f.abs);
+      comp = zlib.deflateRawSync(data, { level: 6 });
+      crc = crc32(data);
+      method = 8;                       // deflate
+      // 保留原始可执行位；缺失时按路径特征兜底
+      const isExec = /\/(MacOS\/[^/]+|[^/]+\.(dylib|so))$/.test(f.name) ||
+                     /\/Electron Helper[^/]*$/.test(f.name) ||
+                     /\/Frameworks\/[^/]+\/Versions\/[^/]+\/[^/]+$/.test(f.name);
+      mode = (f.mode & 0o111) ? 0o755 : (isExec ? 0o755 : 0o644);
+    }
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);           // version needed
     local.writeUInt16LE(0x0800, 6);       // UTF-8 名称
-    local.writeUInt16LE(8, 8);            // deflate
+    local.writeUInt16LE(method, 8);       // 8=deflate, 0=stored(链接)
     local.writeUInt16LE(0, 10);           // time
     local.writeUInt16LE(0x21, 12);        // date (1980-01-01)
     local.writeUInt32LE(crc, 14);
@@ -78,7 +111,7 @@ function zipDir(srcDir, outZip) {
     cd.writeUInt16LE(20, 4);
     cd.writeUInt16LE(20, 6);
     cd.writeUInt16LE(0x0800, 8);
-    cd.writeUInt16LE(8, 10);
+    cd.writeUInt16LE(method, 10);
     cd.writeUInt16LE(0, 12);
     cd.writeUInt16LE(0x21, 14);
     cd.writeUInt32LE(crc, 16);

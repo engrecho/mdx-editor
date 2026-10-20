@@ -14,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const SRC = process.argv[2] || path.join(__dirname, '..', '.cache', 'icons', 'final');
+const SRC = process.argv[2] || path.join(__dirname, '..', '..', '.cache', 'icons', 'final');
 const OUT = process.argv[3] || path.join(__dirname, '..', 'build', 'icons');
 
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];

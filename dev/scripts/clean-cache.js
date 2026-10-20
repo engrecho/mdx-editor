@@ -15,7 +15,7 @@ const path = require('path');
 
 const log = (s, ...a) => console.error(String(s).replace(/\{(\d+)\}/g, (_, i) => a[+i]));
 
-const CACHE = path.join(__dirname, '..', '.cache');
+const CACHE = path.join(__dirname, '..', '..', '.cache');
 const deleteAll = process.argv.includes('--all') || process.argv.includes('-a');
 
 function dirSize(dir) {

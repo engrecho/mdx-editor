@@ -15,7 +15,10 @@
     "pack:mac-x": "node scripts/mac/build-mac.js",
     "mac:fetch": "node scripts/mac/fetch-runtime.js",
     "cache:clean": "node scripts/clean-cache.js",
-    "gen:icons": "node scripts/gen-icons.js && node scripts/make-ico.js"
+    "gen:icons": "node scripts/gen-icons.js && node scripts/make-ico.js",
+    "publish:win": "node scripts/publish.js win",
+    "publish:mac": "node scripts/publish.js mac",
+    "publish": "node scripts/publish.js all"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -39,13 +42,14 @@
     "appId": "cn.bajiaolu.qingmo",
     "productName": "轻墨",
     "directories": {
-      "output": "build-output"
+      "output": "../build-output"
     },
     "files": [
       "src/main/**/*",
       "src/renderer/index.html",
       "src/renderer/style.css",
       "src/renderer/app.bundle.js",
+      "src/renderer/update.bundle.js",
       "package.json"
     ],
     "win": {

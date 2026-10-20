@@ -1000,6 +1000,11 @@ async function boot() {
   renderPreview();
   updateStatus();
   view.focus();
+
+  // 延迟检查更新（等界面就绪，不阻塞启动）
+  setTimeout(() => {
+    if (typeof checkUpdate === 'function') checkUpdate();
+  }, 2500);
 }
 
 // designPreview 需在 boot 完成后执行，否则两者会互相覆盖 tab 状态

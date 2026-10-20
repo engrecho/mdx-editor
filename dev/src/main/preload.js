@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('api', {
   saveAs: (c, name) => ipcRenderer.invoke('fs:saveAs', c, name),
   exportHtml: (html, name) => ipcRenderer.invoke('fs:exportHtml', html, name),
   rebuildMenu: () => ipcRenderer.invoke('app:rebuildMenu'),
+  checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
+  openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
+  version: () => ipcRenderer.sendSync('app:getVersion'),
   on: (ch, fn) => {
     const list = Array.isArray(ch) ? ch : [ch];
     list.forEach(c => ipcRenderer.on(c, (_e, arg) => fn(c, arg)));

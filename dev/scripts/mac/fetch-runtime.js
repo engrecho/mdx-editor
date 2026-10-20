@@ -16,7 +16,7 @@ const VER = process.argv[2] ||
     .devDependencies.electron.replace(/[\^~]/g, '');
 // 运行时缓存放在项目内 .cache/，已 gitignore
 // 删掉后重新执行 npm run mac:fetch 即可再下载
-const CACHE = path.join(__dirname, '..', '..', '.cache', 'electron-mac');
+const CACHE = path.join(__dirname, '..', '..', '..', '.cache', 'electron-mac');
 const ARCHES = ['arm64', 'x64'];
 const MIRRORS = [
   'https://npmmirror.com/mirrors/electron/',

@@ -82,8 +82,12 @@ function extract(zipFile, destDir, filterName) {
       else throw new Error('不支持的压缩方式 ' + method + ' (' + name + ')');
 
       if (isSymlink) {
-        // 符号链接：Windows 无原生支持，写成 .lnk 占位或存文本
+        // Windows 无符号链接权限，但可以用 git 的 core.symlinks 模式——
+        // 写一个「文本文件 + 标记」让上层知道这是链接。
+        // 实际方案：本机用目录 junction 不行（需管理员），
+        // 故存成普通文件 + .__symlink 标记，由 pack 阶段读回。
         const target = data.toString('utf8');
+        fs.writeFileSync(outPath, target);
         fs.writeFileSync(outPath + '.__symlink', target);
       } else {
         fs.writeFileSync(outPath, data);

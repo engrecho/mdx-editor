@@ -1,28 +1,31 @@
-# 依赖与构建产物
-node_modules/
-dist/
-dist-out/
-out-*/
-build-output/
+# 依赖
+dev/node_modules/
+
+# 构建缓存与中间产物
 .cache/
-_archive/
+build-output/
+build-out-*/
+out-*/
+dist-out/
+dist/
 release/
 release-v2/
 
-# 图标生成产物（源文件 logo.svg 保留在仓库）
-build/icons/*.ico
-build/icons/*.icns
-build/icons/icon-*.png
-build/icons/*.base64.txt
+# 图标生成产物（源文件 dev/build/icons/logo.svg 保留）
+dev/build/icons/*.ico
+dev/build/icons/*.icns
+dev/build/icons/icon-*.png
+dev/build/icons/*.base64.txt
 
 # 渲染层 esbuild 产物
-src/renderer/app.bundle.js
+dev/src/renderer/app.bundle.js
+dev/src/renderer/update.bundle.js
 
 # 设计走查临时文件
-src/renderer/_preview.html
-src/renderer/_shot.html
-src/renderer/_seed.js
-src/renderer/_clear.js
+dev/src/renderer/_preview.html
+dev/src/renderer/_shot.html
+dev/src/renderer/_seed.js
+dev/src/renderer/_clear.js
 
 # 系统
 .DS_Store

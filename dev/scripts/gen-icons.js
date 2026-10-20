@@ -18,8 +18,9 @@ const { execFileSync, spawnSync } = require('child_process');
 
 const log = (...a) => console.error(util.format(...a));
 
-const ROOT = path.join(__dirname, '..');
-const OUT = path.join(ROOT, 'build', 'icons');
+const DEV = path.join(__dirname, '..');
+const ROOT = path.join(DEV, '..');
+const OUT = path.join(DEV, 'build', 'icons');
 const WORK = path.join(ROOT, '.cache', 'icons');
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const SVG = path.join(WORK, 'logo.svg');
