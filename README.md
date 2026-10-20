@@ -53,13 +53,14 @@ qingmo/
 │   │   ├── QingMo-1.2.0-mac-arm64.zip
 │   │   ├── QingMo-1.2.0-mac-x64.zip
 │   │   └── 说明.md
-│   └── README.md
 │
 ├── docs/                    ← 【文档】
 │   ├── 使用手册.md             给使用者：快捷键、语法、技巧、FAQ
 │   ├── 开发指南.md             给开发者：架构、打包、踩坑
 │   ├── Windows使用说明.md
 │   └── macOS使用说明.md
+│
+├── _to_delete/              ← 【待删除暂存区】无用产物已挪进这里，确认后可整目录删除
 │
 ├── .gitignore
 ├── RELEASE_NOTES.md         发布说明

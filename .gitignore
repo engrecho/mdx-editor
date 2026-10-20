@@ -12,6 +12,9 @@ dist/
 release/
 release-v2/
 
+# 待删除暂存区（确认无用后可整目录删除）
+_to_delete/
+
 # 图标生成产物（源文件 dev/build/icons/logo.svg 保留）
 dev/build/icons/*.ico
 dev/build/icons/*.icns
