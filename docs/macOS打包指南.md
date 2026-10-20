@@ -4,92 +4,125 @@
 
 ---
 
-## 先说结论
+## 零、Mac 上打包后如何双击打开（最快路径）
 
-| 你的情况 | 用哪个 |
-| --- | --- |
-| 有 Mac，想要正式发布（.dmg） | **方案 A** |
-| 有 Mac，只想要能装的 .app | **方案 B** |
-| 只有 Windows | **方案 C**（但有已知限制，见下） |
+**在你自己的 Mac 上打，双击打开几乎不会有问题**，因为包是在本机生成的，
+不经过下载，macOS 不会给它打隔离标记（quarantine）。
+
+### 三步走
+
+```bash
+# 1. 拿代码（已有代码就跳过）
+git clone https://github.com/engrecho/qingmo.git
+cd qingmo
+
+# 2. 打 dmg（同时会出 zip）
+./dev/pack-mac.sh
+
+# 3. 装上
+open build-output/mac/*.dmg     # 挂载镜像
+# 把「轻墨」拖进 Applications，然后双击打开
+```
+
+完。`pack-mac.sh` 会自动检查 Node 版本、装依赖、检查图标，然后调
+`electron-builder` 出 dmg。
+
+### 双架构（要给别人用，或同时支持 Intel Mac）
+
+```bash
+./dev/pack-mac.sh --both
+```
+
+### 不用脚本，手动来
+
+```bash
+cd qingmo/dev
+npm install
+npm run pack:mac          # dmg + zip
+npm run pack:mac:dmg      # 只要 dmg
+npm run pack:mac:zip      # 只要 zip
+```
+
+产物：`build-output/mac/轻墨-1.2.0.dmg`、`轻墨-1.2.0-mac-arm64.zip`、
+`轻墨-1.2.0-mac-x64.zip`
+
+### 首次打开仍提示「无法验证开发者」
+
+本包已做 **ad-hoc 签名**（配置里 `identity: null`），Gatekeeper 只在
+「从网上下载」时才拦。本机打的基本都能直接双击。
+
+万一还拦，二选一：
+
+```bash
+# 方案1：右键打开（一次性）
+#   在访达里右键点「轻墨」→ 打开 → 弹窗里再点「打开」
+
+# 方案2：命令行放行
+xattr -cr /Applications/轻墨.app
+```
+
+### 前置条件
+
+| 需要 | 版本 | 检查命令 |
+| --- | --- | --- |
+| macOS | 10.15+ | 左上角苹果图标 → 关于本机 |
+| Node.js | **18 或更高（LTS）** | `node -v` |
+| 磁盘 | 约 3 GB | — |
+
+Node 装法：去 <https://nodejs.org> 下 LTS 版 `.pkg`，双击一路下一步。
+
+**架构对照**：M1/M2/M3/M4 选 arm64，Intel 选 x64。
+`pack-mac.sh` 默认按你本机架构打，不用手动选。
 
 ---
 
-## 方案 A：在 Mac 上打 .dmg（推荐）
+## 一、正式发布（.dmg）
 
 `.dmg` 是 macOS 的标准分发格式，有安装向导、能拖到 Applications。
-**必须在 Mac 上打**，因为它依赖 macOS 的 `hdiutil` 磁盘镜像工具。
 
 ```bash
-git clone https://github.com/engrecho/qingmo.git
 cd qingmo/dev
 npm install
 npm run pack:mac
 ```
 
-产物在 `build-output/mac/`：
-- `轻墨-1.2.0.dmg` — 磁盘映像，双击挂载后拖拽安装
-- `轻墨-1.2.0-mac-arm64.zip` — Apple Silicon 通用包
-- `轻墨-1.2.0-mac-x64.zip` — Intel 通用包
+### 加上签名与公证（彻底消除「已损坏」提示）
 
-### 加上签名（消除「已损坏」提示）
-
-未签名的应用首次打开必须右键 → 打开。要彻底消除这个提示，
-需要 Apple 付费开发者账号（$99/年）：
+未签名应用首次打开必须右键 → 打开。要彻底消除，需要 Apple 付费开发者
+账号（$99/年）：
 
 ```bash
-# 1. 签名
-codesign --deep --force --verbose --options runtime \
-  --sign "Developer ID Application: 你的名字 (TEAMID)" \
-  "build-output/mac/轻墨-1.2.0-mac-arm64.zip"
-
-# 实际应对解压后的 .app 签名
-cd build-output/mac
-unzip -q 轻墨-1.2.0-mac-arm64.zip -d signed
-codesign --deep --force --options runtime \
-  --sign "Developer ID Application: 你的名字 (TEAMID)" \
-  signed/轻墨.app
-rm 轻墨-1.2.0-mac-arm64.zip
-cd signed
-zip -qry ../轻墨-1.2.0-mac-arm64.zip 轻墨.app
-cd ..
-
-# 2. 公证（notarization）
-xcrun notarytool submit 轻墨-1.2.0-mac-arm64.zip \
-  --keychain-profile "AC_PROFILE" --wait
-
-# 3. 装订公证票据
-xcrun stapler staple 轻墨-1.2.0-mac-arm64.zip
-```
-
-公证需要在 Xcode 里配置 `notarytool` 的 keychain profile：
-
-```bash
+# 0. 先配置公证凭据（只需一次）
 xcrun notarytool store-credentials "AC_PROFILE" \
   --apple-id "you@example.com" \
   --team-id "TEAMID" \
   --password "app-specific-password"
+
+# 1. 解压 -> 签名 -> 重压
+cd build-output/mac
+unzip -q 轻墨-1.2.0-mac-arm64.zip -d signed
+
+codesign --deep --force --options runtime \
+  --sign "Developer ID Application: 你的名字 (TEAMID)" \
+  --timestamp \
+  signed/轻墨.app
+
+# 2. 公证
+xcrun notarytool submit signed/轻墨.app \
+  --keychain-profile "AC_PROFILE" --wait
+
+# 3. 装订票据（关键，不做这步还是提示损坏）
+xcrun stapler staple signed/轻墨.app
+xcrun stapler validate signed/轻墨.app
+
+# 4. 重压并重打 dmg
+rm 轻墨-1.2.0-mac-arm64.zip
+cd signed && zip -qry ../轻墨-1.2.0-mac-arm64.zip 轻墨.app && cd ..
 ```
 
 ---
 
-## 方案 B：在 Mac 上只打 .app 的 zip
-
-不需要 .dmg，只要一个能解压就能用的包：
-
-```bash
-cd qingmo/dev
-npm install
-npm run mac:fetch     # 下载 Electron mac 运行时（约 200MB，只需一次）
-npm run pack:mac-x    # 组装 .app 并压缩
-```
-
-产物：`build-output/mac/QingMo-1.2.0-mac-arm64.zip` 与 `-mac-x64.zip`
-
-同样是**未签名**，首次要右键打开。
-
----
-
-## 方案 C：在 Windows 上交叉打包
+## 二、只打 .app 的 zip（Windows 交叉打包时用）
 
 ```bash
 cd qingmo/dev
@@ -106,7 +139,24 @@ npm run pack:mac-x
 
 ---
 
-## 「应用已损坏」的真凶与修复记录
+## 三、在 Windows 上交叉打包（给自己在 Mac 上用）
+
+Windows 上打不出 `.dmg`，但能出 `.app` 的 zip。**注意：这种包发给别人时，
+对方首次打开必须右键 → 打开**（因为经过下载，带隔离标记）。
+
+```bash
+cd qingmo/dev
+npm install
+npm run mac:fetch     # 下载 Electron mac 运行时（约 200MB，只需一次）
+npm run pack:mac-x    # 组装 .app 并压缩
+```
+
+**能做什么**：产出可用的 `.app` zip（结构与官方包完全一致）。
+**不能做什么**：出不了 `.dmg`，出不了签名版。
+
+---
+
+## 四、「应用已损坏」的真凶与修复记录
 
 如果你之前下载过早期版本的 mac 包并提示损坏，原因是打包方式有问题。
 
@@ -192,8 +242,8 @@ unzip -l QingMo-1.2.0-mac-arm64.zip | grep -E "Versions/Current|app.asar"
 
 应该能看到 `Versions/Current` 条目和 `app.asar`。
 
-**⑤ 还是不行就在 Mac 上自己打**（方案 A/B），用官方 `electron-builder`，
-不会有任何兼容问题。
+**⑤ 还是不行就在 Mac 上自己打**（见本文开头的「零、Mac 上打包后如何双击打开」），
+用官方 `electron-builder`，不会有任何兼容问题。
 
 ---
 
@@ -201,6 +251,16 @@ unzip -l QingMo-1.2.0-mac-arm64.zip | grep -E "Versions/Current|app.asar"
 
 **Q：为什么 Windows 打不出 .dmg？**
 `.dmg` 是磁盘映像，macOS 用 `hdiutil` 生成，Windows 无对应实现。
+
+**Q：`identity: null` 是什么意思？**
+让 `electron-builder` 自己做 **ad-hoc 签名**（用一个自签证书给自己签），
+而不是去找付费开发者证书。效果是：Gatekeeper 认这个签名，本机打的包
+可以直接双击。代价是没有公证票据，所以从网上下载时仍建议右键打开。
+
+**Q：为什么把 `icon.icns` 加进 Git 了？**
+因为它是打包的**必需输入**，不是产物。`gen-icons.js` 依赖 Windows 的 Edge
+渲染 SVG 出 PNG，在 Mac 上跑不了。如果 `.gitignore` 排除了 `.icns`，
+Mac 上 clone 完直接打包会因找不到图标而失败。
 
 **Q：交叉打包的包能通过 Gatekeeper 吗？**
 不能。签名和公证都需要 Apple 开发者证书，且公证必须在 mac 上跑
@@ -213,6 +273,28 @@ unzip -l QingMo-1.2.0-mac-arm64.zip | grep -E "Versions/Current|app.asar"
 
 **Q：需要 Intel 版本吗？**
 2020 年后的 Mac 都是 Apple 芯片。除非你要给很老的机器用，否则只需要 arm64。
+
+**Q：Node.js 版本要求？**
+18 或更高（`electron-builder` 25.x 的硬性要求）。装 Node 22 LTS 最稳。
+
+**Q：打包要多久？**
+首次 `npm install` 约 1-3 分钟，打包本身 30 秒到 2 分钟。
+依赖装完后重复打包会快很多。
+
+---
+
+## 排查清单
+
+打包报错时按这个顺序查：
+
+| 症状 | 原因 | 解法 |
+| --- | --- | --- |
+| `Cannot find module 'electron'` | 没装依赖 | `cd dev && npm install` |
+| `icon.icns not found` | 图标缺失 | 从 Release 下任意 mac 包取 `icon.icns` 放回 `dev/build/icons/` |
+| `hdiutil: command not found` | 在 Windows 上打 dmg | 只能在 mac 上打 dmg；Windows 用 `npm run pack:mac-x` 出 zip |
+| `requires Node.js >= 18` | Node 太老 | 升级到 LTS |
+| 打得特别慢 | 首次下载 Electron 缓存 | 等一会儿，后续会走缓存 |
+| 打出来 `dmg` 里 app 名是英文 | 缓存了旧配置 | `rm -rf ~/Library/Caches/electron-builder` 后重打 |
 
 ---
 

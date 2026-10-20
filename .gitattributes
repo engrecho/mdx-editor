@@ -1,0 +1,27 @@
+# 默认按文本处理入库，检出时转为 LF（macOS/Linux 需要）
+* text=auto
+
+# Shell 脚本必须是 LF，否则 macOS 上会报 "bad interpreter: /bin/sh^M"
+*.sh text eol=lf
+
+# 源码与配置统一 LF
+*.js   text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.yml  text eol=lf
+*.svg  text eol=lf
+*.md   text eol=lf
+
+# Windows 批处理保持 CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# 二进制，禁止任何转换
+*.ico   binary
+*.icns  binary
+*.png   binary
+*.jpg   binary
+*.exe   binary
+*.dmg   binary
+*.zip   binary

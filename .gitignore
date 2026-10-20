@@ -15,9 +15,11 @@ release-v2/
 # 待删除暂存区（确认无用后可整目录删除）
 _to_delete/
 
-# 图标生成产物（源文件 dev/build/icons/logo.svg 保留）
-dev/build/icons/*.ico
-dev/build/icons/*.icns
+# 图标生成产物
+# 注意：icon.icns / icon.ico 是打包的【必需输入】，必须入库。
+# gen-icons.js 依赖 Windows 的 Edge 生成 PNG，Mac 上跑不了，
+# 所以这两份预生成产物要随仓库分发，否则 Mac clone 后打包会因缺图标失败。
+# 其余尺寸的 PNG 与 base64 仅供 Windows 使用，不入库。
 dev/build/icons/icon-*.png
 dev/build/icons/*.base64.txt
 

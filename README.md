@@ -107,14 +107,29 @@ macOS **首次必须右键点击 → 打开**（未签名，Gatekeeper 会拦截
 
 ### 方案 A：在 Mac 上打包（推荐，能出 .dmg）
 
+**在自己的 Mac 上打包，双击基本不会有问题** —— 本机生成的包不带隔离标记。
+
+一键脚本：
+
 ```bash
 git clone https://github.com/engrecho/qingmo.git
-cd qingmo/dev
-npm install
-npm run pack:mac
+cd qingmo
+./dev/pack-mac.sh                # 当前架构
+./dev/pack-mac.sh --both         # arm64 + x64 双架构
 ```
 
-产物在 `dev/../build-output/mac/`（.dmg 与 .zip）。
+脚本会自动检查 Node 版本（需 18+）、装依赖、检查图标，然后出 dmg。
+产物在 `build-output/mac/`，双击 dmg 挂载，把「轻墨」拖进 Applications 即可。
+
+手动等价命令：
+
+```bash
+cd qingmo/dev
+npm install
+npm run pack:mac          # dmg + zip
+npm run pack:mac:dmg      # 只要 dmg
+npm run pack:mac:zip      # 只要 zip
+```
 
 ### 方案 B：在 Mac 上打 zip（只需 Electron 运行时）
 
@@ -193,8 +208,10 @@ npm run build:renderer
 | `npm start` | 启动应用 |
 | `npm run build:renderer` | 打包渲染层（app.js + update.js） |
 | `npm run pack:win` | 打包 Windows（安装版 + 便携版） |
-| `npm run pack:mac` | 打包 macOS（**需在 Mac 上执行**，出 .dmg） |
-| `npm run pack:mac-x` | 打包 macOS zip（可交叉执行） |
+| `npm run pack:mac` | 打包 macOS（**需在 Mac 上执行**，出 .dmg + .zip） |
+| `npm run pack:mac:dmg` | 只打 macOS dmg |
+| `npm run pack:mac:zip` | 只打 macOS zip |
+| `npm run pack:mac-x` | 交叉打包 macOS zip（可在 Windows 执行） |
 | `npm run mac:fetch` | 下载 Electron mac 运行时 |
 | `npm run gen:icons` | 从 logo.svg 生成全套图标 |
 | `npm run cache:clean` | 清理构建缓存（`-- --all` 连运行时一起清） |
