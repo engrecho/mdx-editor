@@ -191,6 +191,15 @@ body { display: flex; flex-direction: column; user-select: none; }
 .tb:active { transform: translateY(.5px); background: var(--c-100); box-shadow: none; }
 .tb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* 激活态：「预览区直接编辑」开启时高亮 */
+.tb.active {
+  background: var(--accent-soft, var(--c-100));
+  color: var(--accent);
+}
+[data-theme="dark"] .tb.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
 /* 视图分段控件 */
 .right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 
@@ -587,6 +596,38 @@ body { display: flex; flex-direction: column; user-select: none; }
 }
 .markdown-body > *:first-child { margin-top: 0; }
 .markdown-body > *:last-child { margin-bottom: 0; }
+
+/* ---- 预览区直接编辑 ----
+   开启后预览区变成 contenteditable：
+   - 光标改成文本指针，提示「这里可以打字」
+   - 悬停某个块时给一圈极淡的描边，暗示可编辑
+   - 聚焦的那块描边变实，方便定位当前编辑位置
+*/
+.markdown-body[data-live="1"] {
+  cursor: text;
+  outline: none;
+}
+.markdown-body[data-live="1"] > * {
+  border-radius: 4px;
+  transition: box-shadow .15s var(--ease), background .15s var(--ease);
+  box-shadow: 0 0 0 1px transparent;
+}
+.markdown-body[data-live="1"] > *:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+/* contenteditable 聚焦时 Chrome 会给整块加默认轮廓，关掉它 */
+.markdown-body[data-live="1"] > *:focus,
+.markdown-body[data-live="1"] > *:focus-within {
+  outline: none;
+}
+/* 代码块内的光标用等宽字体更合适 */
+.markdown-body[data-live="1"] pre {
+  cursor: text;
+}
+/* 链接仍然显示为可点 */
+.markdown-body[data-live="1"] a {
+  cursor: pointer;
+}
 
 .markdown-body h1, .markdown-body h2,
 .markdown-body h3, .markdown-body h4,

@@ -11,6 +11,7 @@ import { searchKeymap } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { splitBlocks, elementToMarkdown, annotateBlocks } from './live-edit';
 
 const DEFAULT_DOC = `# 欢迎使用轻墨
 
@@ -152,21 +153,220 @@ const previewEl = document.getElementById("preview");
 
 marked.setOptions({ gfm: true, breaks: false, headerIds: true, mangle: false });
 
+/* ---- 预览区直接编辑（Live Preview） ---- */
+const LIVE_KEY = "mdx.live";
+let liveEdit = localStorage.getItem(LIVE_KEY) === "1";
+
+/**
+ * 当前源码的 block 切分结果。
+ * blocks 里含 space token（空行分隔符），它们不产生 DOM，渲染时跳过。
+ */
+let blockMap = { blocks: [], all: [] };
+
 function renderPreview() {
   const md = view.state.doc.toString();
   try {
     const raw = marked.parse(md);
     previewEl.innerHTML = DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
-    previewEl.querySelectorAll("input[type=checkbox]").forEach(cb => { cb.disabled = true; });
+    previewEl.querySelectorAll("input[type=checkbox]").forEach(cb => { cb.disabled = !liveEdit; });
+
+    // 建立「预览区顶层元素 ↔ 源码 block」映射，供直接编辑时按区间回写
+    blockMap = splitBlocks(md);
+    const visible = blockMap.blocks.filter(b => !b.skip);
+    annotateBlocks(previewEl, visible.length);
+
+    if (liveEdit) {
+      previewEl.contentEditable = 'true';
+      previewEl.dataset.live = '1';
+      previewEl.spellcheck = false;
+    } else {
+      previewEl.removeAttribute('contenteditable');
+      delete previewEl.dataset.live;
+    }
   } catch (e) {
-    previewEl.innerHTML = '<p style="color:#d4506a">预览渲染出错：' + e.message + '</p>';
+    previewEl.innerHTML = '<p style="color:#d4506a">预览渲染出错：' + escapeHtml(e.message) + '</p>';
   }
   updateStatus();
 }
 
 function scheduleRender() {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(renderPreview, 80);
+  renderTimer = setTimeout(() => {
+    renderPreview();
+    // 重渲染后刷新文本快照，否则下次 input 事件会误判成"内容变了"
+    snapshotBlockTexts();
+  }, 80);
+}
+
+/* ================================================================
+ * 预览区直接编辑的实现
+ *
+ * 用户在预览区改字后：
+ *   1. 找出被改动的那个顶层元素 → 它在 blockMap 里对应的源码区间
+ *   2. 把该元素转回 Markdown
+ *   3. 用 CodeMirror 的 transaction 替换那一个区间
+ *
+ * 只替换被改的那一段，其余内容（含光标位置）由 CodeMirror 自己维护，
+ * 所以不会跳动、不会丢选区。
+ * ================================================================ */
+
+/** 阻止我们自己的回写触发无限循环 */
+let suppressLiveInput = false;
+/** 记录回写前预览区各 block 的文本，用于判断是哪个被改了 */
+let blockTexts = [];
+
+function snapshotBlockTexts() {
+  blockTexts = [...previewEl.children].map(el => el.textContent);
+}
+
+/** 找到内容发生变化的 block 下标；返回 -1 表示没变 */
+function changedBlockIndex() {
+  const kids = [...previewEl.children];
+  if (kids.length !== blockTexts.length) return -1;
+  for (let i = 0; i < kids.length; i++) {
+    if (kids[i].textContent !== blockTexts[i]) return i;
+  }
+  return -1;
+}
+
+/** 把预览区的第 idx 个 block 转成 Markdown 并写回源码 */
+function writeBackBlock(idx, caretOffset) {
+  const kids = [...previewEl.children];
+  const el = kids[idx];
+  if (!el) return;
+
+  const visible = blockMap.blocks.filter(b => !b.skip);
+  const target = visible[idx];
+  if (!target) return;
+
+  let newMd;
+  try {
+    newMd = elementToMarkdown(el, target.token.type);
+  } catch (e) {
+    return;   // 转换失败就放弃这次回写，保持源码不动（宁可不改，也不能改坏）
+  }
+
+  // 原来 raw 末尾的两个换行是块间分隔符，不要写回去，否则会产生空行堆积
+  const trailing = /\n{2,}$/.exec(target.raw);
+  const tailNl = trailing ? '\n\n' : '';
+  if (!newMd) {
+    // 整个块被删空了 → 连同它后面的分隔空行一起删掉
+    newMd = '';
+  } else {
+    newMd = newMd + tailNl;
+  }
+
+  if (newMd === target.raw) return;   // 没实质变化
+
+  suppressLiveInput = true;
+  view.dispatch({
+    changes: { from: target.start, to: target.end, insert: newMd },
+    // 把 CodeMirror 的光标放到改写后块的末尾，视觉上跟用户在预览区的位置一致
+    selection: { anchor: target.start + newMd.length }
+  });
+  suppressLiveInput = false;
+
+  scheduleSidebarSync();
+  saveDraft();
+}
+
+/** 在预览区粘贴：只取纯文本，避免把外部 HTML 带进来 */
+previewEl.addEventListener('paste', (e) => {
+  if (!liveEdit) return;
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  if (!text) return;
+  document.execCommand('insertText', false, text);
+});
+
+/** 禁止在预览区按 Enter 产生 <div>（浏览器默认行为），改成插入换行 */
+previewEl.addEventListener('keydown', (e) => {
+  if (!liveEdit) return;
+
+  // 代码块内允许正常的多行输入
+  const inCode = e.target.closest && e.target.closest('pre');
+
+  if (e.key === 'Enter' && !e.shiftKey && !inCode) {
+    // Markdown 里单个换行不换行，所以按 Shift+Enter 才是软换行。
+    // 普通 Enter 在这里也应该只是插入换行（因为块的边界由空行决定），
+    // 用 execCommand 让浏览器按当前位置拆分，再由 input 事件统一回写。
+    e.preventDefault();
+    document.execCommand('insertLineBreak');
+    return;
+  }
+
+  // Backspace 在块首：把当前块并回上一块
+  if (e.key === 'Backspace') {
+    const sel = window.getSelection();
+    if (sel && sel.isCollapsed && sel.anchorNode) {
+      const el = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+      const top = el && el.closest ? el.closest('[data-block]') : null;
+      if (top && top.dataset.block !== undefined) {
+        const idx = Number(top.dataset.block);
+        // 光标确实在块的最开头（前面没有可删的字符）
+        const r = document.createRange();
+        r.setStart(top, 0);
+        r.setEnd(sel.anchorNode, sel.anchorOffset);
+        const atStart = r.toString().length === 0;
+        if (atStart && idx > 0) {
+          e.preventDefault();
+          const prev = [...previewEl.children][idx - 1];
+          if (prev) {
+            prev.focus();
+            const r2 = document.createRange();
+            r2.selectNodeContents(prev);
+            r2.collapse(false);
+            const s = window.getSelection();
+            s.removeAllRanges();
+            s.addRange(r2);
+            // 合并：把当前块的内容追加到上一块末尾
+            const merged = prev.cloneNode(true);
+            previewEl.replaceChild(top, merged);
+            top.remove();
+            writeBackBlock(idx - 1);
+          }
+        }
+      }
+    }
+  }
+});
+
+previewEl.addEventListener('input', () => {
+  if (!liveEdit || suppressLiveInput) return;
+  const idx = changedBlockIndex();
+  if (idx < 0) return;
+  writeBackBlock(idx);
+  snapshotBlockTexts();
+});
+
+/** 勾选任务列表的复选框 → 回写成 [x] / [ ] */
+previewEl.addEventListener('change', (e) => {
+  if (!liveEdit) return;
+  const cb = e.target;
+  if (!cb || cb.type !== 'checkbox') return;
+  const top = cb.closest('[data-block]');
+  if (!top || top.dataset.block === undefined) return;
+  const idx = Number(top.dataset.block);
+  writeBackBlock(idx);
+  snapshotBlockTexts();
+});
+
+/** 点击预览区的链接：预览模式下不跳转，新标签打开 */
+previewEl.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href]');
+  if (!a) return;
+  e.preventDefault();
+  window.open(a.href, '_blank', 'noopener');
+});
+
+function setLiveEdit(v) {
+  liveEdit = v;
+  localStorage.setItem(LIVE_KEY, v ? '1' : '0');
+  const btn = document.getElementById('btnLive');
+  if (btn) btn.classList.toggle('active', v);
+  renderPreview();
+  snapshotBlockTexts();
+  toast(v ? '预览区可直接编辑' : '预览区恢复为只读');
 }
 
 function onUpdate(u) {
@@ -856,6 +1056,7 @@ document.getElementById("titlebar").addEventListener("click", e => {
   if (seg) setMode(seg.dataset.view);
 });
 document.getElementById("btnTheme").addEventListener("click", toggleTheme);
+document.getElementById("btnLive").addEventListener("click", () => setLiveEdit(!liveEdit));
 document.getElementById("btnPanel").addEventListener("click", toggleSidebar);
 document.getElementById("btnCollapse").addEventListener("click", toggleSidebar);
 document.getElementById("sbNew").addEventListener("click", () => newFile());
@@ -906,6 +1107,13 @@ document.getElementById("sbCloseAll").addEventListener("click", () => closeAllTa
 window.addEventListener("keydown", e => {
   const mod = e.ctrlKey || e.metaKey;
 
+  // Ctrl+Shift+P 切换「预览区直接编辑」
+  if (mod && e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+    e.preventDefault();
+    setLiveEdit(!liveEdit);
+    return;
+  }
+
   // Ctrl+B 折叠侧边栏
   if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
     // 如果有选区，优先给加粗
@@ -941,13 +1149,14 @@ window.addEventListener("keydown", e => {
 
 window.api.on([
   'cmd:new', 'cmd:open', 'cmd:save', 'cmd:saveAs', 'cmd:exportHtml', 'cmd:find',
-  'view:edit', 'view:split', 'view:preview', 'view:theme'
+  'view:edit', 'view:split', 'view:preview', 'view:theme', 'view:liveEdit'
 ], (ch) => {
   const map = {
     'view:edit': () => setMode('edit'),
     'view:split': () => setMode('split'),
     'view:preview': () => setMode('preview'),
-    'view:theme': toggleTheme
+    'view:theme': toggleTheme,
+    'view:liveEdit': () => setLiveEdit(!liveEdit)
   };
   if (map[ch]) map[ch](); else run(ch);
 });
@@ -998,7 +1207,11 @@ async function boot() {
 
   renderSidebar();
   renderPreview();
+  snapshotBlockTexts();
   updateStatus();
+  // 恢复「预览区直接编辑」状态，并同步按钮高亮
+  const liveBtn = document.getElementById('btnLive');
+  if (liveBtn) liveBtn.classList.toggle('active', liveEdit);
   view.focus();
 
   // 延迟检查更新（等界面就绪，不阻塞启动）

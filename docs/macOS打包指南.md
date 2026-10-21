@@ -20,7 +20,7 @@ cd qingmo
 ./dev/pack-mac.sh
 
 # 3. 装上
-open build-out/mac/*.dmg     # 挂载镜像
+open .cache/build/mac/*.dmg     # 挂载镜像
 # 把「轻墨」拖进 Applications，然后双击打开
 ```
 
@@ -43,8 +43,8 @@ npm run pack:mac:dmg      # 只要 dmg
 npm run pack:mac:zip      # 只要 zip
 ```
 
-产物：`build-out/mac/轻墨-1.2.1.dmg`、`轻墨-1.2.1-mac-arm64.zip`、
-`轻墨-1.2.1-mac-x64.zip`
+产物：`.cache/build/mac/轻墨-1.3.0.dmg`、`轻墨-1.3.0-mac-arm64.zip`、
+`轻墨-1.3.0-mac-x64.zip`
 
 ### 首次打开仍提示「无法验证开发者」
 
@@ -99,8 +99,8 @@ xcrun notarytool store-credentials "AC_PROFILE" \
   --password "app-specific-password"
 
 # 1. 解压 -> 签名 -> 重压
-cd build-out/mac
-unzip -q 轻墨-1.2.1-mac-arm64.zip -d signed
+cd .cache/build/mac
+unzip -q 轻墨-1.3.0-mac-arm64.zip -d signed
 
 codesign --deep --force --options runtime \
   --sign "Developer ID Application: 你的名字 (TEAMID)" \
@@ -116,8 +116,8 @@ xcrun stapler staple signed/轻墨.app
 xcrun stapler validate signed/轻墨.app
 
 # 4. 重压并重打 dmg
-rm 轻墨-1.2.1-mac-arm64.zip
-cd signed && zip -qry ../轻墨-1.2.1-mac-arm64.zip 轻墨.app && cd ..
+rm 轻墨-1.3.0-mac-arm64.zip
+cd signed && zip -qry ../轻墨-1.3.0-mac-arm64.zip 轻墨.app && cd ..
 ```
 
 ---
@@ -237,7 +237,7 @@ file /Applications/轻墨.app/Contents/MacOS/轻墨
 **④ 检查包完整性**
 
 ```bash
-unzip -l QingMo-1.2.1-mac-arm64.zip | grep -E "Versions/Current|app.asar"
+unzip -l QingMo-1.3.0-mac-arm64.zip | grep -E "Versions/Current|app.asar"
 ```
 
 应该能看到 `Versions/Current` 条目和 `app.asar`。

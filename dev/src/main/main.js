@@ -144,6 +144,7 @@ function buildMenu() {
         { label: '分栏', accelerator: 'CmdOrCtrl+2', click: send('view:split') },
         { label: '预览', accelerator: 'CmdOrCtrl+3', click: send('view:preview') },
         { type: 'separator' },
+        { label: '预览区直接编辑', accelerator: 'CmdOrCtrl+Shift+P', click: send('view:liveEdit') },
         { label: '切换深色模式', accelerator: 'CmdOrCtrl+D', click: send('view:theme') },
         { type: 'separator' },
         { role: 'reload', label: '重新加载' },

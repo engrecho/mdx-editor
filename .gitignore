@@ -54,3 +54,6 @@ dev/src/renderer/_clear.js
 .DS_Store
 Thumbs.db
 *.log
+
+# 历史遗留的待删除目录（已迁至 .cache/trash/，云盘锁定删不掉时残留）
+_to_delete/

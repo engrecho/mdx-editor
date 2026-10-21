@@ -2,10 +2,23 @@
 
 > 简洁轻量的跨平台 Markdown 编辑器 —— 左边写，右边即时看到成品。
 
-Windows / macOS 双端运行，支持实时预览、快捷插入、多标签与自动更新检测。
+Windows / macOS 双端运行，支持实时预览、预览区直接编辑、快捷插入、多标签与自动更新检测。
 
 **仓库**：[github.com/engrecho/qingmo](https://github.com/engrecho/qingmo)
-**版本**：v1.2.1
+**版本**：v1.3.0
+
+## 两种编辑方式
+
+| 方式 | 快捷键 | 适合 |
+| --- | --- | --- |
+| **源码模式** | `Ctrl+1` / `Ctrl+2` | 写结构：插标题、表格、代码块 |
+| **所见即所得** | `Ctrl+3` + `Ctrl+Shift+P` | 润色成稿：直接在预览区改字 |
+
+按 `Ctrl+Shift+P` 打开「预览区直接编辑」后，右侧预览区就能直接打字了 ——
+改动实时写回左边源码，勾选任务列表的方框也会同步更新 `[ ]` / `[x]`。
+写完初稿通读时用这个，眼睛不用再看那些 `#`、`**`、`- `。
+
+详细说明见 [`docs/使用手册.md`](docs/使用手册.md) 的「预览区直接编辑」。
 
 > [!IMPORTANT]
 > **如果本仓库位于云盘同步目录（路径里带「云电脑同步」「OneDrive」「坚果云」等），**
@@ -29,42 +42,52 @@ qingmo/
 │   │       ├── index.html           页面结构（含 SVG 图标雪碧图）
 │   │       ├── style.css           全部样式（设计令牌 + 亮/暗双主题）
 │   │       ├── app.js              核心逻辑（多标签、编辑、预览、命令）
+│   │       ├── live-edit.js        预览区直接编辑（DOM ↔ Markdown 双向映射）
 │   │       ├── update.js           版本更新检测与提示 UI
 │   │       ├── app.bundle.js       esbuild 产物（勿手改）
 │   │       └── update.bundle.js    esbuild 产物（勿手改）
 │   │
 │   ├── scripts/                构建脚本
 │   │   ├── build-renderer.js       渲染层打包
+│   │   ├── pack.js                 打包入口（自动避开被占用的输出目录）
+│   │   ├── pick-output.js          探测输出目录是否被占用
 │   │   ├── gen-icons.js           SVG → 多尺寸 PNG
 │   │   ├── png-tool.js            纯 JS PNG 编解码与缩放
 │   │   ├── make-ico.js            ICO / ICNS 封装
 │   │   ├── clean-cache.js         清理构建缓存
 │   │   ├── publish.js             产物同步到 release/
 │   │   ├── release.js             发布 GitHub Release
+│   │   ├── test-live-edit.js      live-edit 单元测试
+│   │   ├── verify-asar.js         校验产物里的 main.js
 │   │   └── mac/                    macOS 交叉打包管线
 │   │       ├── fetch-runtime.js      下载 Electron mac 运行时
 │   │       └── build-mac.js          组装 .app
 │   │
-│   ├── build/icons/            图标源文件（logo.svg）与生成产物
+│   ├── build/icons/            图标源文件（logo.svg）与打包必需的 icns/ico
 │   ├── package.json
 │   ├── package-lock.json
 │   └── run.bat                 Windows 一键启动
 │
 ├── release/                 ← 【发布目录】拿去用，别改
 │   ├── windows/                Windows 安装版 + 便携版
-│   │   ├── 轻墨 Setup 1.2.1.exe
-│   │   ├── 轻墨 1.2.1.exe
+│   │   ├── 轻墨 Setup 1.3.0.exe
+│   │   ├── 轻墨 1.3.0.exe
 │   │   ├── portable/              免安装目录版
 │   │   └── 说明.md
 │   ├── macos/                  macOS 双架构 zip
-│   │   ├── QingMo-1.2.1-mac-arm64.zip
-│   │   ├── QingMo-1.2.1-mac-x64.zip
+│   │   ├── QingMo-1.3.0-mac-arm64.zip
+│   │   ├── QingMo-1.3.0-mac-x64.zip
 │   │   └── 说明.md
 │   └── README.md
 │
-├── build-out/               ← 【构建产物】打包时自动生成，可随时删
-│   ├── win-unpacked/            免安装目录版的源
-│   └── mac/                     macOS zip 的源
+├── .cache/                  ← 【中间文件】所有临时产物都在这里，随时可删
+│   ├── build/                  构建产物（electron-builder 输出）
+│   │   ├── win-unpacked/           免安装目录版的源
+│   │   └── mac/                    macOS zip 的源
+│   ├── electron-mac/            Electron mac 运行时缓存（约 200M）
+│   ├── icons/                   图标生成的临时文件
+│   ├── scratch/                 一次性脚本与调试产物
+│   └── trash/                   待删除暂存区（确认无用后可整目录删）
 │
 ├── docs/                    ← 【文档】
 │   ├── 使用手册.md             给使用者：快捷键、语法、技巧、FAQ
@@ -73,13 +96,14 @@ qingmo/
 │   ├── macOS使用说明.md
 │   └── macOS打包指南.md
 │
-├── _to_delete/              ← 【待删除暂存区】无用产物已挪进这里，确认后可整目录删除
-│
 ├── .gitignore
 ├── .gitattributes
 ├── RELEASE_NOTES.md         发布说明
 └── README.md
 ```
+
+> **约定**：中间文件一律放 `.cache/`，项目根目录只留源码和发布产物。
+> 这样 `git status` 永远是干净的，`ls` 也不会被一堆 `build-*` 淹没。
 
 **三类目录的区别**：
 
@@ -87,7 +111,7 @@ qingmo/
 | --- | --- | --- |
 | `dev/` | 开发 | 想改功能才动，需要 Node 环境 |
 | `release/` | 发布 | 直接使用，或交给别人 |
-| `build-out/` | 构建产物 | 打包时自动生成，不需要手动管，可随时删 |
+| `.cache/` | 中间文件 | 打包时自动生成，不需要管，可随时删 |
 
 ---
 
@@ -99,16 +123,16 @@ qingmo/
 
 | 文件 | 说明 |
 | --- | --- |
-| `轻墨 Setup 1.2.1.exe` | **安装版**（推荐）。双击安装，可选目录，创建桌面快捷方式 |
-| `轻墨 1.2.1.exe` | 单文件版。免安装，但**首次启动要等 5-10 秒**（内部要解压） |
+| `轻墨 Setup 1.3.0.exe` | **安装版**（推荐）。双击安装，可选目录，创建桌面快捷方式 |
+| `轻墨 1.3.0.exe` | 单文件版。免安装，但**首次启动要等 5-10 秒**（内部要解压） |
 | `portable/轻墨.exe` | 免安装目录版。**双击立即启动**，整个文件夹一起复制 |
 
 **macOS**
 
 | 文件 | 适用机型 |
 | --- | --- |
-| `QingMo-1.2.1-mac-arm64.zip` | Apple Silicon（M1/M2/M3/M4）—— 大多数人选这个 |
-| `QingMo-1.2.1-mac-x64.zip` | Intel 芯片 |
+| `QingMo-1.3.0-mac-arm64.zip` | Apple Silicon（M1/M2/M3/M4）—— 大多数人选这个 |
+| `QingMo-1.3.0-mac-x64.zip` | Intel 芯片 |
 
 macOS **首次必须右键点击 → 打开**（未签名，Gatekeeper 会拦截）。详见
 [`docs/macOS使用说明.md`](docs/macOS使用说明.md)。
@@ -134,7 +158,7 @@ cd qingmo
 ```
 
 脚本会自动检查 Node 版本（需 18+）、装依赖、检查图标，然后出 dmg。
-产物在 `build-out/mac/`，双击 dmg 挂载，把「轻墨」拖进 Applications 即可。
+产物在 `.cache/build/mac/`，双击 dmg 挂载，把「轻墨」拖进 Applications 即可。
 
 手动等价命令：
 
@@ -248,7 +272,7 @@ npm run pack:win
 npm run publish:win
 
 # 3. 发布
-node scripts/release.js --tag v1.2.1 --notes-file ../RELEASE_NOTES.md
+node scripts/release.js --tag v1.3.0 --notes-file ../RELEASE_NOTES.md
 ```
 
 脚本会：创建 Release（已存在则复用）→ 上传 `release/` 下的所有 `.exe` / `.zip`
@@ -323,4 +347,4 @@ msedge --headless=new --screenshot=out.png --window-size=1440,900 \
 
 ---
 
-**轻墨 QingMo** · v1.2.1 · MIT License
+**轻墨 QingMo** · v1.3.0 · MIT License
