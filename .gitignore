@@ -1,10 +1,24 @@
 # 依赖
 dev/node_modules/
 
-# 构建缓存与中间产物
-# build-output 是历史遗留目录名，build-out 才是当前输出目录
-build-output/
+# ---------------------------------------------------------------------
+# .cache/ —— 所有中间文件统一放这里，根目录保持干净
+#
+# 约定（用户要求）：
+#   以后构建产物、临时文件、测试脚本产物一律进 .cache/，
+#   不要再往项目根目录扔 build-* / dist-* 之类的目录。
+#
+#   .cache/build/          构建产物（electron-builder 输出）
+#   .cache/build/mac/      macOS zip
+#   .cache/electron-mac/   Electron mac 运行时缓存
+#   .cache/icons/          图标生成的临时文件
+#   .cache/trash/          待删除暂存区（确认后整目录删）
+#   .cache/scratch/        一次性脚本与调试产物
+# ---------------------------------------------------------------------
 .cache/
+
+# 历史遗留的构建目录名（旧版本用过），换到 .cache/ 之前留下的
+build-output/
 build-out/
 build-out-*/
 win-build-*/
@@ -13,9 +27,6 @@ dist-out/
 dist/
 release/
 release-v2/
-
-# 待删除暂存区（确认无用后可整目录删除）
-_to_delete/
 
 # 图标生成产物
 # 注意：icon.icns / icon.ico / icon-256.png 是打包的【必需输入】，必须入库。

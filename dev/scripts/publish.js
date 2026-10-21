@@ -4,10 +4,11 @@
  *
  * 用法：node scripts/publish.js [win|mac|all]
  *
- * 目录约定：
- *   dev/           开发目录（源码）
- *   build-output/  构建中间产物
- *   release/       发布目录（最终交付）
+ * 目录约定（中间文件统一进 .cache/，根目录保持干净）：
+ *   dev/                开发目录（源码）
+ *   .cache/build/       构建产物（electron-builder 输出）
+ *   .cache/trash/       待删除暂存区（确认无用后可整目录删）
+ *   release/            发布目录（最终交付）
  */
 const fs = require('fs');
 const path = require('path');
@@ -18,10 +19,23 @@ const log = (...a) => console.error(util.format(...a));
 
 const DEV = path.join(__dirname, '..');
 const ROOT = path.join(DEV, '..');
-// 候选输出目录：electron-builder 的 directories.output 历史上被改过几次，
-// 且各目录里可能残留不同版本的产物。所以按「版本号取最新」而不是「按目录顺序」。
-const OUT_CANDIDATES = ['build-out', 'build-output', 'build-out-win', 'dist-out']
-  .map(d => path.join(ROOT, d));
+
+// 待删除暂存区：删除操作会被环境安全 hook 拦截，所以用「挪走」代替「删掉」。
+// 挪到 .cache/trash/ 下，跟其他中间文件放一起。
+const TRASH = path.join('.cache', 'trash');
+
+// 候选输出目录：
+//   首选 .cache/build/（当前约定），后面几个是历史遗留的目录名，
+//   electron-builder 的 directories.output 改过几次，旧目录里可能还留着旧产物。
+//   按「版本号取最新」而不是「按目录顺序」来挑。
+const OUT_CANDIDATES = [
+  path.join('.cache', 'build'),
+  path.join('.cache', 'build-out'),
+  'build-out',
+  'build-output',
+  'build-out-win',
+  'dist-out'
+].map(d => path.join(ROOT, d));
 
 /**
  * 追加动态选出的输出目录。
@@ -42,7 +56,7 @@ function pickNewest(ext) {
   let maxVer = [0, 0, 0];
   for (const out of OUT_CANDIDATES) {
     if (!fs.existsSync(out)) continue;
-    // 一级目录 + 其子目录（mac zip 在 build-output/mac/ 下）
+    // 一级目录 + 其子目录（mac zip 在 .cache/build/mac/ 下）
     const files = [];
     for (const f of fs.readdirSync(out)) {
       const fp = path.join(out, f);
@@ -106,7 +120,7 @@ function copyDir(src, dst) {
  */
 function moveAway(dir) {
   if (!fs.existsSync(dir)) return;
-  const trash = path.join(ROOT, '_to_delete', 'publish-old-' + Date.now());
+  const trash = path.join(ROOT, TRASH, 'publish-old-' + Date.now());
   fs.mkdirSync(path.dirname(trash), { recursive: true });
   try {
     fs.renameSync(dir, trash);
@@ -130,7 +144,7 @@ if (target === 'win' || target === 'all') {
     log('  ⚠ 没找到新的 exe，保留 release/windows/ 现有内容不动');
   } else {
     // 清掉旧版本文件（挪走而非删除：删除操作会被环境安全 hook 拦截）
-    const oldExes = path.join(ROOT, '_to_delete', 'publish-old-exe-' + Date.now());
+    const oldExes = path.join(ROOT, TRASH, 'publish-old-exe-' + Date.now());
     for (const f of fs.existsSync(winDir) ? fs.readdirSync(winDir) : []) {
       if (!f.endsWith('.exe')) continue;
       try {
@@ -163,7 +177,7 @@ if (target === 'win' || target === 'all') {
     // 先把新内容拷进一个临时目录，确认成功再换过去。
     // 直接 moveAway 旧目录的话，一旦目录改名被 Windows 拒绝
     // （内含被占用的文件），旧内容会留在原地，和新内容混在一起。
-    const staging = path.join(ROOT, '_to_delete', 'portable-staging-' + Date.now());
+    const staging = path.join(ROOT, TRASH, 'portable-staging-' + Date.now());
     try {
       copyDir(best.src, staging);
       // 用「逐文件覆盖」而不是换目录：换目录可能被 Windows 拒绝
@@ -189,7 +203,7 @@ if (target === 'mac' || target === 'all') {
   if (!macZips.length) {
     log('  ⚠ 没找到新的 mac zip，保留 release/macos/ 现有内容不动');
   } else {
-    const oldZips = path.join(ROOT, '_to_delete', 'publish-old-zip-' + Date.now());
+    const oldZips = path.join(ROOT, TRASH, 'publish-old-zip-' + Date.now());
     for (const f of fs.existsSync(macDir) ? fs.readdirSync(macDir) : []) {
       if (!f.endsWith('.zip')) continue;
       try {

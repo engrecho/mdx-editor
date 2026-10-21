@@ -22,7 +22,8 @@ const log = (...a) => console.error(util.format(...a));
 
 const DEV = path.join(__dirname, '..');
 const ROOT = path.join(DEV, '..');
-const base = process.argv[2] || 'build-out';
+// 构建产物统一放 .cache/build，不往项目根目录扔
+const base = process.argv[2] || path.join('.cache', 'build');
 
 const REL = path.join(ROOT, '.cache', 'busy-check.txt');
 fs.mkdirSync(path.dirname(REL), { recursive: true });
@@ -60,14 +61,14 @@ let outDir = path.join(ROOT, base);
 let locked = hasLockedFile(outDir);
 
 if (locked.length) {
-  log('输出目录 %s 里有 %d 个被占用的文件', path.basename(outDir), locked.length);
+  log('输出目录 %s 里有 %d 个被占用的文件', path.relative(ROOT, outDir), locked.length);
   locked.slice(0, 3).forEach(f => log('  %s', path.relative(ROOT, f)));
-  // 换一个新目录名，彻底避开占用
+  // 换一个新目录名，彻底避开占用（仍在 .cache/ 下）
   const stamp = Date.now().toString(36);
   outDir = path.join(ROOT, base + '-' + stamp);
-  log('改用新目录: %s', path.basename(outDir));
+  log('改用新目录: %s', path.relative(ROOT, outDir));
 } else {
-  log('输出目录 %s 可用', path.basename(outDir));
+  log('输出目录 %s 可用', path.relative(ROOT, outDir));
 }
 
 fs.writeFileSync(REL, outDir, 'utf8');

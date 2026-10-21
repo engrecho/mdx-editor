@@ -47,7 +47,7 @@
     "appId": "cn.bajiaolu.qingmo",
     "productName": "轻墨",
     "directories": {
-      "output": "../build-out"
+      "output": "../.cache/build"
     },
     "files": [
       "src/main/**/*",
