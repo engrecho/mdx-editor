@@ -23,7 +23,9 @@
     "publish:win": "node scripts/publish.js win",
     "publish:mac": "node scripts/publish.js mac",
     "publish": "node scripts/publish.js all",
-    "verify:asar": "node scripts/verify-asar.js"
+    "verify:asar": "node scripts/verify-asar.js",
+    "test:live-edit": "node scripts/test-live-edit.js",
+    "test:dom": "node scripts/test-dom.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
