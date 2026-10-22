@@ -1,6 +1,6 @@
 {
   "name": "qingmo",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "轻墨 QingMo — 简洁轻量的跨平台 Markdown 编辑器",
   "main": "src/main/main.js",
   "author": "王君龙",
@@ -26,7 +26,10 @@
     "publish": "node scripts/publish.js all",
     "verify:asar": "node scripts/verify-asar.js",
     "test:live-edit": "node scripts/test-live-edit.js",
-    "test:dom": "node scripts/test-dom.js"
+    "test:dom": "node scripts/test-dom.js",
+    "test:assoc": "electron scripts/test-file-association.js",
+    "verify:ui": "electron scripts/verify-ui.js",
+    "gen:logo": "electron scripts/gen-logo-icons.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -85,6 +88,26 @@
       },
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
     },
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd",
+          "mkdn",
+          "mdtxt",
+          "mdtext"
+        ],
+        "name": "Markdown",
+        "description": "Markdown 文档",
+        "mimeType": "text/markdown",
+        "role": "Editor",
+        "rank": "Owner",
+        "isPackage": false,
+        "icon": "build/icons/icon-256.png"
+      }
+    ],
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

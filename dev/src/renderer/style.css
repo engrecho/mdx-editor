@@ -176,8 +176,8 @@ body { display: flex; flex-direction: column; user-select: none; }
   cursor: default;
 }
 .logo img {
-  width: 18px; height: 18px;
-  border-radius: 5px;
+  width: 14px; height: 14px;
+  border-radius: 4px;
   border: 1px solid var(--c-150);
   display: block;
 }

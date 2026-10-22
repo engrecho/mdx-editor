@@ -317,6 +317,63 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+
+  // 冷启动时通过命令行 / open-file 收到过文件，等窗口加载完再送进去
+  if (pendingOpenPath) {
+    const p = pendingOpenPath;
+    pendingOpenPath = null;
+    const send = () => win && win.webContents.send('cmd:openPath', p);
+    if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send);
+    else send();
+  }
 });
+
+/* ============ 文件关联：Finder 双击 / 打开方式 / 命令行传参 ============ */
+//
+// macOS 双击 .md 时系统不会把路径塞进 argv，而是：
+//   1. 先发 open-file 事件（可能早于 app ready，win 还是 null）
+//   2. 已经开着实例时，Launch Services 会把事件送到那个实例
+// 所以 open-file 必须在模块顶层注册（早于 whenReady），并且要把
+// ready 之前收到的路径暂存起来，等窗口 did-finish-load 再投喂。
+const DOC_EXTS = new Set(['.md', '.markdown', '.mdown', '.mkd', '.mkdn', '.mdtxt', '.mdtext', '.text', '.txt']);
+
+let pendingOpenPath = null;
+
+function isDocPath(p) {
+  return typeof p === 'string' && DOC_EXTS.has(path.extname(p).toLowerCase());
+}
+
+/** 把文件投给渲染层：窗口没建好就先暂存，好了就直接发 */
+function openPathInApp(p) {
+  if (!isDocPath(p)) return false;
+  try {
+    if (!fs.existsSync(p)) return false;
+  } catch (e) { return false; }
+
+  if (!win || win.isDestroyed()) { pendingOpenPath = p; return true; }
+  const send = () => {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    win.webContents.send('cmd:openPath', p);
+  };
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send);
+  else send();
+  return true;
+}
+
+// macOS：Finder 双击 / Dock 拖文件进窗口
+app.on('open-file', (e, p) => {
+  e.preventDefault();
+  openPathInApp(p);
+});
+
+// Windows / Linux：路径在命令行参数里（跳过可执行文件本身和 electron 开关）
+for (const a of process.argv.slice(1)) {
+  if (isDocPath(a)) {
+    app.whenReady().then(() => openPathInApp(a));
+    break;
+  }
+}
 
 app.on('window-all-closed', () => { if (!isMac) app.quit(); });

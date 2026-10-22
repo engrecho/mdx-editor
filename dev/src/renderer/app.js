@@ -169,7 +169,26 @@ let liveEdit = localStorage.getItem(LIVE_KEY) === "1";
  */
 let blockMap = { blocks: [], all: [] };
 
-function renderPreview() {
+/**
+ * 重渲染预览区。
+ *
+ * @param force 切标签 / 切模式 / 开关 liveEdit 这类必须立刻重建的场景传 true。
+ *
+ * 关键：用户在预览区直接打字时（live-edit），焦点在 previewEl 里面，
+ * 而重建用的是 `previewEl.innerHTML = ...` —— innerHTML 一赋值，
+ * contenteditable 里的焦点和光标会被整体丢弃，表现为「输入到一行
+ * 就自动失焦、光标跳到别的地方」。所以焦点还在预览区时先挂起这次
+ * 渲染，等失焦（focusout）后再补上。
+ */
+let previewRenderPending = false;
+
+function renderPreview(force) {
+  if (!force && liveEdit && previewEl.contains(document.activeElement)) {
+    previewRenderPending = true;
+    return;
+  }
+  previewRenderPending = false;
+
   const md = view.state.doc.toString();
   try {
     const raw = marked.parse(md);
@@ -203,6 +222,21 @@ function scheduleRender() {
     snapshotBlockTexts();
   }, 80);
 }
+
+/**
+ * 焦点离开预览区时，把挂起的渲染补上。
+ *
+ * 用 focusout（冒泡）而不是 blur：contentEditable 内部元素之间的
+ * 焦点移动不该触发整体重建，只有真正离开预览区才补。
+ */
+previewEl.addEventListener('focusout', () => {
+  if (!previewRenderPending) return;
+  // 放到下一帧，等 focus 已经完成，避免重建时焦点又被算回去
+  setTimeout(() => {
+    if (previewRenderPending) renderPreview();
+    snapshotBlockTexts();
+  }, 0);
+});
 
 /* ================================================================
  * 预览区直接编辑的实现
@@ -370,7 +404,7 @@ function setLiveEdit(v) {
   localStorage.setItem(LIVE_KEY, v ? '1' : '0');
   const btn = document.getElementById('btnLive');
   if (btn) btn.classList.toggle('active', v);
-  renderPreview();
+  renderPreview(true);
   snapshotBlockTexts();
   toast(v ? '预览区可直接编辑' : '预览区恢复为只读');
 }
@@ -486,7 +520,7 @@ function switchTab(id) {
   fileName.textContent = tabName(t);
   setDirty(t.dirty);
   renderSidebar();
-  renderPreview();
+  renderPreview(true);
   updateStatus();
 }
 
@@ -788,13 +822,10 @@ function insertTable() {
 }
 
 function insertQuote() {
-  const { from, to, text } = getSel();
-  if (text) {
-    const q = text.split('\n').map(l => '> ' + l).join('\n');
-    replaceSelection(q, q.length);
-  } else {
-    replaceSelection('> 引用内容\n', 2);
-  }
+  toggleLinePrefix(
+    (t) => { const m = /^(\s*>\s?)/.exec(t); return m ? m[1] : null; },
+    () => '> '
+  );
   toast('已插入引用');
 }
 
@@ -805,26 +836,60 @@ function insertCodeBlock() {
   toast('已插入代码块');
 }
 
-function insertList(kind) {
-  const { from, to, text } = getSel();
-  if (text) {
-    const lines = text.split('\n');
-    const out = lines.map((l, i) => kind === 'ol' ? `${i + 1}. ${l}` : `- ${l}`).join('\n');
-    replaceSelection(out, out.length);
-    return;
+/**
+ * 行首前缀切换（无序 / 有序列表、任务列表、引用都走这里）。
+ *
+ * 之前无选区时用 replaceSelection 把模板插在**光标处**，于是点在行中间
+ * 就会把「光标到行尾」那一段变成列表，行首反而没标记 —— 行为不对。
+ * 正确语义跟 heading() 一致：作用于**行首**。
+ *   · 行首没有同类前缀 → 逐行插入前缀（列表序号按行序递增）
+ *   · 行首已有同类前缀 → 整块撤掉（再点一次复原，起 toggle 作用）
+ * 选区跨多行时，每一行都按上面的规则处理。
+ *
+ * @param match (lineText) => 命中的前缀全文；没有则返回 null
+ * @param make  (行序号，1 起) => 要插入的前缀
+ */
+function toggleLinePrefix(match, make) {
+  const { from, to } = getSel();
+  const startLine = view.state.doc.lineAt(from);
+  const endLine = view.state.doc.lineAt(to);
+  const removing = !!match(view.state.sliceDoc(startLine.from, startLine.to));
+
+  const changes = [];
+  for (let n = startLine.number; n <= endLine.number; n++) {
+    const ln = view.state.doc.line(n);
+    if (removing) {
+      const m = match(view.state.sliceDoc(ln.from, ln.to));
+      if (m) changes.push({ from: ln.from, to: ln.from + m.length, insert: '' });
+    } else {
+      changes.push({ from: ln.from, insert: make(n - startLine.number + 1) });
+    }
   }
-  const tpl = kind === 'ol' ? '1. \n2. \n3. ' : '- \n- \n- ';
-  replaceSelection(tpl, kind === 'ol' ? 3 : 2);
+  if (changes.length) view.dispatch({ changes });
+  // 不指定 selection：CodeMirror 会把光标映射到同一段文字上，
+  // 正好停在刚插入的前缀之后，位置感不变。
+  view.focus();
+}
+
+function insertList(kind) {
+  if (kind === 'ol') {
+    toggleLinePrefix(
+      (t) => { const m = /^(\s*\d+[.)]\s+)/.exec(t); return m ? m[1] : null; },
+      (i) => i + '. '
+    );
+  } else {
+    toggleLinePrefix(
+      (t) => { const m = /^(\s*[-*+]\s+)/.exec(t); return m ? m[1] : null; },
+      () => '- '
+    );
+  }
 }
 
 function insertTodo() {
-  const { from, to, text } = getSel();
-  if (text) {
-    const out = text.split('\n').map(l => `- [ ] ${l.replace(/^[-*]\s*(\[[ xX]\]\s*)?/, '')}`).join('\n');
-    replaceSelection(out, out.length);
-  } else {
-    replaceSelection('- [ ] 待办事项', 6);
-  }
+  toggleLinePrefix(
+    (t) => { const m = /^(\s*[-*+]\s+(?:\[[ xX]\]\s+)?)/.exec(t); return m ? m[1] : null; },
+    () => '- [ ] '
+  );
 }
 
 function insertHr() {
@@ -1006,7 +1071,7 @@ function setMode(mode) {
   panes.dataset.mode = mode;
   document.querySelectorAll('#segbar .seg').forEach(b => b.classList.toggle('active', b.dataset.view === mode));
   localStorage.setItem('mdx.mode', mode);
-  requestAnimationFrame(() => { view.requestMeasure(); if (mode !== 'preview') renderPreview(); });
+  requestAnimationFrame(() => { view.requestMeasure(); if (mode !== 'preview') renderPreview(true); });
 }
 
 /* ============ 主题 ============ */
@@ -1172,7 +1237,10 @@ window.api.on([
   'fmt:bold', 'fmt:italic', 'fmt:code', 'fmt:strike', 'fmt:h1', 'fmt:h2', 'fmt:h3'
 ], (ch) => run(ch));
 
-window.api.on('cmd:openPath', async p => {
+// 注意参数：preload 的 on 回调签名是 (channel, arg)，这里第一个参数是频道名，
+// 文件路径在第二个。写成 (p) => 会把 'cmd:openPath' 当成路径传下去，
+// 结果就是「双击 md 打开没反应」「最近打开点了也没反应」。
+window.api.on('cmd:openPath', async (_ch, p) => {
   const r = await window.api.openPath(p);
   if (r && !r.error) addTab({ path: r.path, content: r.content || '' });
 });
@@ -1212,7 +1280,7 @@ async function boot() {
   if (!restored) addTab({ content: DEFAULT_DOC });
 
   renderSidebar();
-  renderPreview();
+  renderPreview(true);
   snapshotBlockTexts();
   updateStatus();
   // 恢复「预览区直接编辑」状态，并同步按钮高亮
@@ -1228,6 +1296,36 @@ async function boot() {
 
 // designPreview 需在 boot 完成后执行，否则两者会互相覆盖 tab 状态
 const booted = boot();
+
+/* 自动化验证入口：仅 ?test=1 时暴露内部状态，供 scripts/verify-ui.js 用。
+ * 跟 designPreview 一样是走查/测试专用钩子，正常使用不暴露任何东西。 */
+if (/[?&]test=1/.test(location.search)) {
+  window.__qingmo = {
+    getDoc: () => view.state.doc.toString(),
+    setDoc: (text, cursor) => view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: text },
+      selection: { anchor: cursor == null ? 0 : cursor }
+    }),
+    setCursor: (pos) => view.dispatch({ selection: { anchor: pos } }),
+    run,
+    setLiveEdit,
+    isLiveEdit: () => liveEdit,
+    focusInPreview: (blockIndex) => {
+      // contenteditable 的编辑宿主是 previewEl 本身，聚焦子元素不生效，
+      // 要先聚焦宿主，再把选区放到目标 block 里
+      const el = previewEl.children[blockIndex || 0];
+      if (!el) return false;
+      previewEl.focus();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    }
+  };
+}
 
 /* 设计走查用：?shot=1&theme=light|dark 注入多标签演示数据并置顶主题 */
 (async function designPreview() {
@@ -1260,6 +1358,6 @@ const booted = boot();
 
   clearDraft();
   renderSidebar();
-  renderPreview();
+  renderPreview(true);
   updateStatus();
 })();
