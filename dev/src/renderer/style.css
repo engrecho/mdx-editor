@@ -31,7 +31,9 @@
   --r-md: 7px;
   --r-lg: 10px;
 
-  --tb-h: 44px;
+  --tb-row1: 40px;   /* 第一行：窗口控制 + 文件操作 + 居中标题 + 主题切换 */
+  --tb-row2: 40px;   /* 第二行：编辑工具 + 视图切换 */
+  --tb-h: calc(var(--tb-row1) + var(--tb-row2));
   --status-h: 26px;
 
   --ease: cubic-bezier(.4, 0, .2, 1);
@@ -91,9 +93,7 @@ body { display: flex; flex-direction: column; user-select: none; }
 .titlebar {
   flex: 0 0 var(--tb-h);
   display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 12px 0 16px;
+  flex-direction: column;
   background: var(--c-25);
   border-bottom: 1px solid var(--c-150);
   -webkit-app-region: drag;
@@ -102,27 +102,86 @@ body { display: flex; flex-direction: column; user-select: none; }
 }
 .titlebar button, .titlebar .tools { -webkit-app-region: no-drag; }
 
+/* ---------- 两行结构 ----------
+   行1：窗口控制（macOS 红绿灯 / 原生按钮）+ 折叠侧边栏 + 文件操作
+        + 居中标题 + 主题切换
+   行2：编辑工具 + 视图切换 */
+.tb-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+.tb-row-1 { height: var(--tb-row1); position: relative; }
+.tb-row-2 { height: var(--tb-row2); padding: 0 12px 0 16px; border-top: 1px solid var(--c-100); }
+
+/* 平台避让 padding 挂在行1左右集群上（而非整行），
+   这样行1内绝对定位的标题才能相对整行宽度真正居中 */
+.tb-row-1 .brand    { padding-left: 16px; }
+.tb-row-1 .tb-right { padding-right: 12px; }
+
+/* macOS：左上角系统红绿灯（关闭 / 最小化 / 缩放）约占 78px，
+   第一行左侧内容右移避让，避免与应用自家按钮叠在一起。
+   平台标记由 app.js 根据 preload 暴露的 process.platform 写入
+   document.documentElement.dataset.platform（macOS 下值为 "darwin"）。 */
+:root[data-platform="darwin"] .tb-row-1 .brand { padding-left: 80px; }
+/* Windows / Linux：原生标题按钮在右上角（约 140px），第一行右侧留位 */
+:root:not([data-platform="darwin"]) .tb-row-1 .tb-right { padding-right: 148px; }
+
+/* 第一行中心标题：绝对定位居中，不受左右集群宽度影响；
+   pointer-events 穿透，中心带仍可拖动窗口 */
+.tb-title {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(46%, 520px);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--c-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  pointer-events: none;
+}
+[data-theme="dark"] .tb-title { color: var(--c-900); }
+
+/* 右侧集群：主题切换 / 视图切换 / 实时编辑 */
+.tb-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 9px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   flex: 0 0 auto;
 }
+/* 品牌区：新 LOGO 为白底 squircle 图标（黑手写 Qm），自带形状，
+   不再需要 accent-weak 底色；加一圈浅色描边让白底在浅色标题栏上可辨 */
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 8px 2px 3px;
-  background: var(--accent-weak);
-  border-radius: var(--r-sm);
+  gap: 6px;
+  padding: 0;
+  background: transparent;
   cursor: default;
 }
 .logo img {
-  width: 16px; height: 16px;
-  border-radius: 3px;
+  width: 18px; height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--c-150);
   display: block;
 }
+[data-theme="dark"] .logo img { border-color: var(--c-200); }
 .logo b {
   font-size: 12px;
   font-weight: 650;
@@ -130,15 +189,6 @@ body { display: flex; flex-direction: column; user-select: none; }
   color: var(--c-700);
 }
 [data-theme="dark"] .logo b { color: var(--c-900); }
-.doc-name {
-  font-size: 12.5px;
-  color: var(--c-500);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
-}
-
 .tools {
   display: flex;
   align-items: center;
@@ -201,8 +251,6 @@ body { display: flex; flex-direction: column; user-select: none; }
 }
 
 /* 视图分段控件 */
-.right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-
 .segbar {
   display: flex;
   padding: 2px;
@@ -1007,17 +1055,17 @@ body { display: flex; flex-direction: column; user-select: none; }
 .ua-empty { color: var(--c-400); }
 
 /* ---------- 关于 ---------- */
+/* about 弹窗 LOGO：白底 squircle 自含形状，容器不再给底色 */
 .about-logo {
   width: 52px; height: 52px;
   margin: 0 auto 12px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--accent-weak);
-  border-radius: 13px;
+  background: transparent;
 }
-.about-logo svg {
-  width: 26px; height: 26px;
-  fill: none; stroke: var(--accent);
-  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+.about-logo img {
+  width: 52px; height: 52px;
+  border-radius: 12px;
+  display: block;
 }
 .about-name { font-size: 16px; font-weight: 650; letter-spacing: .02em; }
 .about-ver { font-size: 12px; color: var(--c-400); margin-top: 3px; }

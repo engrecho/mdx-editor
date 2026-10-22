@@ -44,65 +44,71 @@
   </svg>
 
   <header class="titlebar" id="titlebar">
-    <div class="brand">
-      <button class="tb icon-only" id="btnPanel" title="折叠 / 展开侧边栏 (Ctrl+B)"><svg><use href="#i-panel"/></svg></button>
-      <span class="logo" title="轻墨 QingMo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABIklEQVR42u3YMQrCMBTG8eDkbbyGo8dw0huosyfwDA66ODjp4gkUHBzExRO4CaJ0KYWm5ZWkMa/5f/C2dPh+DSGtMYQQQkgpq3Pvq2GSLp/PxYzTLe97JwAAAAAAAAAAAAAAoGzmW1M7s425Jg2QzeJo+kkDZAMAAAAAAAAAAADQCkAx0mdOz0k+nQKQIBTLqweoirS8K0K0ADaEqvJqASSRlHdBiAqgCsVWdn0b6Aaoe9t2hGmp6P4xckaIBkACZCuoEkB66kvWuJ4FUQBI1rZ1LwgO8P68Gl98ml6MmiAEB/Bd3nUXBAXY3YfBAKQIQQHaKu+yCwD41xnQ1vd99IcgP0QAAAAAAAAAAAAAAOgYgEaE5cFjeW0IXt88IYSQxPIDMa+uqQmHAhsAAAAASUVORK5CYII=" alt="轻墨" width="16" height="16" /><b>轻墨</b></span>
-      <span class="doc-name" id="fileName">未命名.md</span>
-    </div>
-
-    <div class="tools">
-      <div class="tgroup">
+    <!-- 第一行：窗口控制（macOS 红绿灯 / 原生按钮）+ 折叠侧边栏 + 文件操作 + 居中标题 + 主题切换 -->
+    <div class="tb-row tb-row-1">
+      <div class="brand">
+        <button class="tb icon-only" id="btnPanel" title="折叠 / 展开侧边栏 (Ctrl+B)"><svg><use href="#i-panel"/></svg></button>
+        <span class="logo" title="轻墨 QingMo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAAAAXNSR0IArs4c6QAAAppJREFUWEfNmL2LE1EQwH+TeCmCIKhol8pGC78lKoimsvI4kLS2toqCmLM7IpEUWqrVYZm/IDaHcgdJIaiJaCNc44GeIgoHBjX7vMndaj42yb63m/O2ymbfzPzevPnYHaHvMsacBq4Ah4CDwL7+NRHvV4F3wBtgXkRedOsT/8YYMwUUgRtAIqLRsOK/gDmgJCL6mw6QMeYw8AQ4ElZTzOte66mISMMHKgG3YjZiq+62iJTEGHMGWNrCYxoG+hM4pUAPgau225nQ+kcKVAeyEzJgq/a5An0DdtlKTmj9JwUyE1LupNYJKJPJ8GFlBeN5WjKcDA8TsgJqNBrMzFxmefl9lz6tHCY2sNBAicRG8R7ukQTF4hyFQiGSx8YCjQfptZ9KpWi1Woj87UpWgCOBXJV29UcrmE4vG5Vlw4BmZ+8wPX2JbDbbaYaBYS1gPPuAtwKaSu3gxPGT1Gq1np0Hget/nudN1kOjUjwIyqUkWHloNJBmYe8RbSugfD5PpVL5n0eWRGSjQLp4xie3OjIV0syq1/UF4d+l8aNlR7tIEIwfX2FArYE6tWIzg5LJJF4ntQfTW40PKxsjY9GlDlkHxoCAYExwSQjVOsK42g4ygTHtQJGxQL6U9rS4wIQEXlQgBWs2m5w9d4G1718HdqewuVyOxcUl2u3fPc/L5TLVapWFhWebnonBQ90W0uk0rR8tfQsK9JoG+57de/n8ZXXg+biMC31kdjHivlqBPgL73VXEKtl5ya8CF2NV667sqQJth89ofwv3FOgA8BLY6b6xWCTXgKP+sOHa+sfi/VjUuiu5LiIPfCB9mdHB0TF3fZEkddhxXkS8/oGVDo9urg+RkpHUhxfWIdVdHZT1DKy65bdwpPcWeCwir7rt/wE0O0qF8iXKPgAAAABJRU5ErkJggg==" alt="轻墨" width="18" height="18" /><b>轻墨</b></span>
+        <span class="tdiv"></span>
         <button class="tb" data-cmd="cmd:new"  title="新建 (Ctrl+N)"><svg><use href="#i-file-plus"/></svg></button>
         <button class="tb" data-cmd="cmd:open" title="打开 (Ctrl+O)"><svg><use href="#i-folder-open"/></svg></button>
         <button class="tb" data-cmd="cmd:save" title="保存 (Ctrl+S)"><svg><use href="#i-save"/></svg></button>
         <button class="tb" data-cmd="cmd:exportHtml" title="导出 HTML (Ctrl+Shift+E)"><svg><use href="#i-export"/></svg></button>
       </div>
 
-      <span class="tdiv"></span>
+      <span class="tb-title" id="fileName">未命名.md</span>
 
-      <div class="tgroup">
-        <button class="tb" data-cmd="fmt:h1" title="标题 1 (Ctrl+Alt+1)"><svg><use href="#i-h1"/></svg></button>
-        <button class="tb" data-cmd="fmt:h2" title="标题 2 (Ctrl+Alt+2)"><svg><use href="#i-h2"/></svg></button>
-        <button class="tb" data-cmd="fmt:h3" title="标题 3 (Ctrl+Alt+3)"><svg><use href="#i-h3"/></svg></button>
-      </div>
-
-      <span class="tdiv"></span>
-
-      <div class="tgroup">
-        <button class="tb" data-cmd="fmt:bold"   title="粗体 (Ctrl+B)"><svg><use href="#i-bold"/></svg></button>
-        <button class="tb" data-cmd="fmt:italic" title="斜体 (Ctrl+I)"><svg><use href="#i-italic"/></svg></button>
-        <button class="tb" data-cmd="fmt:strike" title="删除线 (Ctrl+Shift+X)"><svg><use href="#i-strike"/></svg></button>
-        <button class="tb" data-cmd="fmt:code"   title="行内代码 (Ctrl+E)"><svg><use href="#i-code"/></svg></button>
-      </div>
-
-      <span class="tdiv"></span>
-
-      <div class="tgroup">
-        <button class="tb" data-cmd="ins:table"  title="插入表格 (Ctrl+T)"><svg><use href="#i-table"/></svg></button>
-        <button class="tb" data-cmd="ins:quote"  title="插入引用 (Ctrl+Shift+Q)"><svg><use href="#i-quote"/></svg></button>
-        <button class="tb" data-cmd="ins:code"   title="代码块 (Ctrl+Shift+K)"><svg><use href="#i-codeblock"/></svg></button>
-        <button class="tb" data-cmd="ins:ul"     title="无序列表 (Ctrl+Shift+8)"><svg><use href="#i-ul"/></svg></button>
-        <button class="tb" data-cmd="ins:ol"     title="有序列表 (Ctrl+Shift+7)"><svg><use href="#i-ol"/></svg></button>
-        <button class="tb" data-cmd="ins:todo"   title="任务列表 (Ctrl+Shift+9)"><svg><use href="#i-todo"/></svg></button>
-        <button class="tb" data-cmd="ins:hr"     title="分隔线 (Ctrl+Shift+M)"><svg><use href="#i-hr"/></svg></button>
-        <button class="tb" data-cmd="ins:link"   title="链接 (Ctrl+Shift+L)"><svg><use href="#i-link"/></svg></button>
-        <button class="tb" data-cmd="ins:image"  title="图片 (Ctrl+Shift+I)"><svg><use href="#i-image"/></svg></button>
+      <div class="tb-right">
+        <button class="tb icon-only" id="btnTheme" title="切换深色模式 (Ctrl+D)">
+          <svg class="ic-light"><use href="#i-moon"/></svg>
+          <svg class="ic-dark"><use href="#i-sun"/></svg>
+        </button>
       </div>
     </div>
 
-    <div class="right">
-      <div class="segbar" id="segbar">
-        <button class="seg" data-view="edit"    title="仅编辑 (Ctrl+1)"><svg><use href="#i-edit"/></svg></button>
-        <button class="seg active" data-view="split"   title="分栏 (Ctrl+2)"><svg><use href="#i-split"/></svg></button>
-        <button class="seg" data-view="preview" title="仅预览 (Ctrl+3)"><svg><use href="#i-eye"/></svg></button>
+    <!-- 第二行：编辑工具 + 视图切换 -->
+    <div class="tb-row tb-row-2">
+      <div class="tools">
+        <div class="tgroup">
+          <button class="tb" data-cmd="fmt:h1" title="标题 1 (Ctrl+Alt+1)"><svg><use href="#i-h1"/></svg></button>
+          <button class="tb" data-cmd="fmt:h2" title="标题 2 (Ctrl+Alt+2)"><svg><use href="#i-h2"/></svg></button>
+          <button class="tb" data-cmd="fmt:h3" title="标题 3 (Ctrl+Alt+3)"><svg><use href="#i-h3"/></svg></button>
+        </div>
+
+        <span class="tdiv"></span>
+
+        <div class="tgroup">
+          <button class="tb" data-cmd="fmt:bold"   title="粗体 (Ctrl+B)"><svg><use href="#i-bold"/></svg></button>
+          <button class="tb" data-cmd="fmt:italic" title="斜体 (Ctrl+I)"><svg><use href="#i-italic"/></svg></button>
+          <button class="tb" data-cmd="fmt:strike" title="删除线 (Ctrl+Shift+X)"><svg><use href="#i-strike"/></svg></button>
+          <button class="tb" data-cmd="fmt:code"   title="行内代码 (Ctrl+E)"><svg><use href="#i-code"/></svg></button>
+        </div>
+
+        <span class="tdiv"></span>
+
+        <div class="tgroup">
+          <button class="tb" data-cmd="ins:table"  title="插入表格 (Ctrl+T)"><svg><use href="#i-table"/></svg></button>
+          <button class="tb" data-cmd="ins:quote"  title="插入引用 (Ctrl+Shift+Q)"><svg><use href="#i-quote"/></svg></button>
+          <button class="tb" data-cmd="ins:code"   title="代码块 (Ctrl+Shift+K)"><svg><use href="#i-codeblock"/></svg></button>
+          <button class="tb" data-cmd="ins:ul"     title="无序列表 (Ctrl+Shift+8)"><svg><use href="#i-ul"/></svg></button>
+          <button class="tb" data-cmd="ins:ol"     title="有序列表 (Ctrl+Shift+7)"><svg><use href="#i-ol"/></svg></button>
+          <button class="tb" data-cmd="ins:todo"   title="任务列表 (Ctrl+Shift+9)"><svg><use href="#i-todo"/></svg></button>
+          <button class="tb" data-cmd="ins:hr"     title="分隔线 (Ctrl+Shift+M)"><svg><use href="#i-hr"/></svg></button>
+          <button class="tb" data-cmd="ins:link"   title="链接 (Ctrl+Shift+L)"><svg><use href="#i-link"/></svg></button>
+          <button class="tb" data-cmd="ins:image"  title="图片 (Ctrl+Shift+I)"><svg><use href="#i-image"/></svg></button>
+        </div>
       </div>
-      <button class="tb icon-only" id="btnLive" title="预览区直接编辑 (Ctrl+Shift+P)">
-        <svg><use href="#i-pencil"/></svg>
-      </button>
-      <button class="tb icon-only" id="btnTheme" title="切换深色模式 (Ctrl+D)">
-        <svg class="ic-light"><use href="#i-moon"/></svg>
-        <svg class="ic-dark"><use href="#i-sun"/></svg>
-      </button>
+
+      <div class="tb-right">
+        <div class="segbar" id="segbar">
+          <button class="seg" data-view="edit"    title="仅编辑 (Ctrl+1)"><svg><use href="#i-edit"/></svg></button>
+          <button class="seg active" data-view="split"   title="分栏 (Ctrl+2)"><svg><use href="#i-split"/></svg></button>
+          <button class="seg" data-view="preview" title="仅预览 (Ctrl+3)"><svg><use href="#i-eye"/></svg></button>
+        </div>
+        <button class="tb icon-only" id="btnLive" title="预览区直接编辑 (Ctrl+Shift+P)">
+          <svg><use href="#i-pencil"/></svg>
+        </button>
+      </div>
     </div>
   </header>
 

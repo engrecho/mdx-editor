@@ -13,6 +13,12 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { splitBlocks, elementToMarkdown, annotateBlocks } from './live-edit';
 
+/* 平台标记：macOS 下标题栏左侧要避让系统红绿灯（见 style.css data-platform 规则）。
+   在模块求值时就写上，首帧绘制前生效，避免闪一下默认布局。 */
+if (window.api && window.api.platform) {
+  document.documentElement.dataset.platform = window.api.platform;
+}
+
 const DEFAULT_DOC = `# 欢迎使用轻墨
 
 **轻墨** 是一个简洁轻量的 Markdown 编辑器。左边写，右边即时看到成品。
