@@ -24,7 +24,10 @@ const SCRATCH = path.join(ROOT, '.cache', 'scratch');
 const RESULT_FILE = path.join(SCRATCH, 'test-dom-result.json');
 const BUNDLE = path.join(SCRATCH, 'test-dom-bundle.js');
 const HTML = path.join(SCRATCH, 'test-dom.html');
-const ELECTRON = path.join(DEV, 'node_modules', 'electron', 'dist', 'electron.exe');
+// macOS 上 Electron 可执行文件在 .app 包内，Windows 才是 dist/electron.exe
+const ELECTRON = process.platform === 'darwin'
+  ? path.join(DEV, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron')
+  : path.join(DEV, 'node_modules', 'electron', 'dist', 'electron.exe');
 const MAIN = path.join(DEV, 'scripts', 'test-dom-main.js');
 
 fs.mkdirSync(SCRATCH, { recursive: true });
@@ -72,7 +75,11 @@ delete childEnv.NODE_OPTIONS;
 childEnv.TEST_DOM_HTML = HTML;
 childEnv.TEST_DOM_RESULT = RESULT_FILE;
 
-const child = spawn(ELECTRON, [MAIN], {
+// macOS 上从外层沙箱（CI / 终端嵌套环境）启动 Electron 时，其内置 seatbelt
+// 会因权限不足初始化失败，加 --no-sandbox 放行；正常桌面环境不受影响
+const SPAWN_ARGS = process.platform === 'darwin' ? ['--no-sandbox', MAIN] : [MAIN];
+
+const child = spawn(ELECTRON, SPAWN_ARGS, {
   cwd: DEV,
   stdio: ['ignore', 'inherit', 'inherit'],
   env: childEnv
