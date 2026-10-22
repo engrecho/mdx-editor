@@ -136,15 +136,17 @@ async function main() {
   const asciiName = (name) => {
     const m = name.match(/(\d+\.\d+\.\d+)/);
     const ver = m ? m[1] : '';
-    if (/mac.*arm64/i.test(name)) return `QingMo-${ver}-mac-arm64.zip`;
-    if (/mac.*x64/i.test(name)) return `QingMo-${ver}-mac-x64.zip`;
+    // arch 与 mac 的先后顺序无所谓（electron-builder 默认命名是 -arm64-mac，
+    // 显式 --x64 又是 -mac，两种都认）
+    if (/(arm64.*mac|mac.*arm64)/i.test(name)) return `QingMo-${ver}-mac-arm64.zip`;
+    if (/(x64.*mac|mac.*x64)/i.test(name)) return `QingMo-${ver}-mac-x64.zip`;
     if (/setup/i.test(name)) return `QingMo-${ver}-win-setup.exe`;
     if (name.endsWith('.exe')) return `QingMo-${ver}-win-portable.exe`;
     return name.replace(/[^\x20-\x7E]/g, '_');
   };
   const labelOf = (name) => {
-    if (/mac.*arm64/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Apple 芯片)';
-    if (/mac.*x64/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Intel)';
+    if (/(arm64.*mac|mac.*arm64)/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Apple 芯片)';
+    if (/(x64.*mac|mac.*x64)/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Intel)';
     if (/setup/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' Windows 安装版';
     if (name.endsWith('.exe')) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' Windows 便携版';
     return name;

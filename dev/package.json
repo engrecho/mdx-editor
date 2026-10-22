@@ -82,7 +82,8 @@
         "CFBundleDisplayName": "轻墨",
         "CFBundleName": "轻墨",
         "NSHumanReadableCopyright": "MIT License"
-      }
+      },
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
