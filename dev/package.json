@@ -18,6 +18,7 @@
     "pack": "npm run build:renderer && electron-builder --win --mac",
     "pack:mac-x": "node scripts/mac/build-mac.js",
     "mac:fetch": "node scripts/mac/fetch-runtime.js",
+    "export:mac": "node scripts/export-for-mac.js",
     "cache:clean": "node scripts/clean-cache.js",
     "gen:icons": "node scripts/gen-icons.js && node scripts/make-ico.js",
     "publish:win": "node scripts/publish.js win",
