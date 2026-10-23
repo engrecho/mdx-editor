@@ -1,6 +1,6 @@
 {
   "name": "qingmo",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "轻墨 QingMo — 简洁轻量的跨平台 Markdown 编辑器",
   "main": "src/main/main.js",
   "author": "王君龙",
@@ -20,8 +20,7 @@
     "mac:fetch": "node scripts/mac/fetch-runtime.js",
     "export:mac": "node scripts/export-for-mac.js",
     "cache:clean": "node scripts/clean-cache.js",
-    "gen:icons": "node scripts/gen-icons.js && node scripts/make-ico.js",
-    "publish:win": "node scripts/publish.js win",
+        "publish:win": "node scripts/publish.js win",
     "publish:mac": "node scripts/publish.js mac && node scripts/verify-mac.js",
     "publish": "node scripts/publish.js all",
     "verify:asar": "node scripts/verify-asar.js",
