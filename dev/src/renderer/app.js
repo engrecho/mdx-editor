@@ -12,6 +12,12 @@ import { tags as t } from '@lezer/highlight';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { splitBlocks, elementToMarkdown, annotateBlocks } from './live-edit';
+import { planBlockAfter, coveringEmphasis, findEmphasisAt } from './editor-core';
+import { planEnter, planBackspace, planTab, parseTableRow, isTableDivider, makeTableRow, parseListItem } from './editor-keys';
+import { install as installLogger, logError, logInfo } from './logger.js';
+
+// 全局异常捕获 —— 装在最早，早期报错也能进日志
+installLogger();
 // 平台标记：写入 <html data-platform="...">，供 styles/mac.css、styles/win.css
 // 做平台专属样式（macOS 标题栏左侧要避让系统红绿灯）。
 // 以副作用模块引入，保证首帧绘制前就生效，避免闪一下默认布局。
@@ -122,6 +128,9 @@ const state = EditorState.create({
     ])),
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     keymap.of([
+      // ⚠ Markdown 手感必须在 defaultKeymap 之前 ——
+      //   defaultKeymap 里也有 Enter/Tab，放后面就抢不到了。
+      ...markdownKeymap(),
       { key: "Tab", run: (v) => indentMore(v) || indentLess(v) },
       ...closeBracketsKeymap,
       ...defaultKeymap,
@@ -207,6 +216,11 @@ function renderPreview(force) {
       delete previewEl.dataset.live;
     }
   } catch (e) {
+    logError('render', '预览渲染失败: ' + (e && e.message), {
+      stack: e && e.stack,
+      docLength: md.length,
+      docHead: md.slice(0, 200)
+    });
     previewEl.innerHTML = '<p style="color:#d4506a">预览渲染出错：' + escapeHtml(e.message) + '</p>';
   }
   updateStatus();
@@ -281,7 +295,17 @@ function writeBackBlock(idx, caretOffset) {
   try {
     newMd = elementToMarkdown(el, target.token.type);
   } catch (e) {
-    return;   // 转换失败就放弃这次回写，保持源码不动（宁可不改，也不能改坏）
+    // 转换失败就放弃这次回写，保持源码不动（宁可不改，也不能改坏）
+    // 但必须记日志 —— 否则「在预览区改了字但源码没变」完全无从查起
+    logError('live-edit', 'DOM → Markdown 转换失败，已放弃本次回写', {
+      blockIndex: idx,
+      tokenType: target.token.type,
+      raw: target.raw,
+      html: el.outerHTML && el.outerHTML.slice(0, 300),
+      message: e && e.message,
+      stack: e && e.stack
+    });
+    return;
   }
 
   // 原来 raw 末尾的两个换行是块间分隔符，不要写回去，否则会产生空行堆积
@@ -788,11 +812,54 @@ function wrap(before, after) {
     view.focus();
     return;
   }
+
+  // ⚠ 选区落在某个强调区间里时的处理。
+  //
+  // 之前没有这个检查，于是：
+  //   '这是**加粗**的文字' 选中「粗」再点加粗
+  //   → '这是**加****粗**的文字'   ← 嵌套垃圾，Markdown 渲染也乱
+  //
+  // 三种情况要分开：
+  //   ① 同种格式 + 完整覆盖 → 取消该强调（**文字** 点加粗 → 文字）
+  //   ② 异种格式 + 完整覆盖 → 叠加（**文字** 点斜体 → ***文字***）
+  //   ③ 只覆盖强调的一部分 → 放弃修改
+  //      （局部取消强调需要嵌套语法 **加*粗**，极易写错，
+  //        所以宁可什么都不做，也不要产生垃圾语法）
+  const docText = view.state.doc.toString();
+  const emp = findEmphasisAt(docText, from);
+  if (emp) {
+    const fullCover = from <= emp.innerStart && to >= emp.innerEnd;
+    if (!fullCover) return;                    // ③ 局部 → 放弃
+    if (emp.marker === before) {               // ① 同种 → 取消
+      view.dispatch({
+        changes: {
+          from: emp.start, to: emp.end,
+          insert: docText.slice(emp.innerStart, emp.innerEnd)
+        },
+        selection: {
+          anchor: emp.start, head: emp.start + (emp.innerEnd - emp.innerStart)
+        }
+      });
+      view.focus();
+      return;
+    }
+    // ② 异种 → 继续往下走，套一层（Markdown 支持 ***文字*** 这种嵌套）
+  }
+
   replaceSelection(before + text + after, before.length + text.length);
   view.dispatch({ selection: { anchor: from + before.length, head: from + before.length + text.length } });
 }
 
 // 块级插入：智能处理行首
+/**
+ * 用一段新内容替换「光标所在的整行」。
+ *
+ * ⚠ 光标位置必须相对【新文档】算，不能用 from + offset ——
+ * 因为整行被替换后，光标所在行之前的字符数变了。
+ * 之前写成 `from + prefix.length + offset`，当 from 大于新块的起始位置时
+ * 光标会落到文档末尾之外 → CodeMirror 报
+ * "Selection points outside of document"，而且【整篇文档会变成空的】。
+ */
 function insertBlock(text, cursorOffsetInBlock) {
   const { from, to } = getSel();
   const startLine = view.state.doc.lineAt(from);
@@ -802,10 +869,33 @@ function insertBlock(text, cursorOffsetInBlock) {
 
   const prefix = startLine.from === 0 ? '' : '\n\n';
   const full = prefix + body + '\n';
-  const pos = from + prefix.length + (cursorOffsetInBlock != null ? cursorOffsetInBlock : body.length);
+  // 关键：以【替换区起点】为基准算光标
+  const pos = startLine.from + prefix.length +
+    (cursorOffsetInBlock != null ? cursorOffsetInBlock : body.length);
   view.dispatch({
     changes: { from: startLine.from, to: endLine.to, insert: full },
     selection: { anchor: pos }
+  });
+  view.focus();
+}
+
+/**
+ * 在【当前行之后】另起一块插入内容。
+ *
+ * 块级内容（代码块、分隔线、表格）必须另起一块 ——
+ * 之前 ins:code / ins:hr / ins:table 都在光标处直接插，
+ * 会把所在段落从中间劈成两半：
+ *   `> 这是引` + '```\n\n```' + `用内容`
+ * 而且 ins:table 还会把整个列表项吃掉。
+ */
+function insertBlockAfter(block, caretOffsetInBlock) {
+  const { from } = getSel();
+  const docText = view.state.doc.toString();
+  const plan = planBlockAfter(docText, from, block);
+  if (!plan) return;
+  view.dispatch({
+    changes: { from: plan.from, to: plan.to, insert: plan.insert },
+    selection: { anchor: plan.caret - (caretOffsetInBlock != null ? caretOffsetInBlock : 0) }
   });
   view.focus();
 }
@@ -832,7 +922,11 @@ function insertTable() {
       (rows.length ? rows.map(r => `| ${r} | ${head.slice(1).map(() => ' ').join(' | ')} |`).join('\n') + '\n' : emptyRow + '\n');
     replaceSelection(t2, 2);
   } else {
-    insertBlock(tpl, null);
+    // 表格是块级内容，必须另起一块。
+    // 之前用 insertBlock（整行替换），在列表项中间点插入表格
+    // 会把整个列表项吃掉：
+    //   '- 列表项甲\n- 列表项乙' → '|表头...|\n\n- 列表项乙'
+    insertBlockAfter(tpl);
   }
   toast('已插入表格');
 }
@@ -847,8 +941,20 @@ function insertQuote() {
 
 function insertCodeBlock() {
   const { from, to, text } = getSel();
-  if (text) replaceSelection('```\n' + text + '\n```\n', 4 + text.length);
-  else replaceSelection('```\n\n```', 3);
+  if (text) {
+    // 有选区：把选区包进代码块（块级内容，替换选区所在整行）
+    const startLine = view.state.doc.lineAt(from);
+    const endLine = view.state.doc.lineAt(to);
+    const block = '```\n' + text + '\n```';
+    view.dispatch({
+      changes: { from: startLine.from, to: endLine.to, insert: block },
+      selection: { anchor: startLine.from + 4 + text.length }
+    });
+    view.focus();
+  } else {
+    // 无选区：另起一块插入，不要把当前段落从中间劈开
+    insertBlockAfter('```\n\n```', 3);
+  }
   toast('已插入代码块');
 }
 
@@ -909,7 +1015,11 @@ function insertTodo() {
 }
 
 function insertHr() {
-  replaceSelection('\n\n---\n\n', 7);
+  // 分隔线是块级内容，必须另起一块。
+  // 之前用 replaceSelection('\n\n---\n\n') 直接插在光标处，
+  // 会把段落从中间劈开：
+  //   '- 列表项甲' → '- 列表\n\n---\n\n项甲'
+  insertBlockAfter('---');
 }
 
 function insertLink() {
@@ -924,6 +1034,7 @@ function insertLink() {
 }
 
 function insertImage() {
+  // 图片语法是行内的（![alt](src)），留在光标处不会破坏段落结构
   replaceSelection('![图片描述](https://)', 7);
   toast('已插入图片语法');
 }
@@ -952,6 +1063,198 @@ function heading(level) {
     }
     view.focus();
   }
+}
+
+/**
+ * Markdown 编辑手感 —— Enter / Backspace / Tab
+ *
+ * 之前完全没有这些处理，导致：
+ *   · 列表项按 Enter 不会续列表（要手打 '- '）
+ *   · 列表行首按 Backspace 不会取消标记
+ *   · 表格里按 Tab 反而是缩进，跳不到下一格
+ * 这是 Markdown 编辑器最基础的手感，缺了就「没法用」。
+ *
+ * 行为规划在 editor-keys.js（纯函数，可单测），
+ * 这里只负责把规划翻译成 CodeMirror 的 transaction。
+ */
+function markdownKeymap() {
+  /** 拿到全文行数组 + 光标所在行列 */
+  function ctx() {
+    const sel = view.state.selection.main;
+    const docText = view.state.doc.toString();
+    const lines = docText.split('\n');
+    const line = view.state.doc.lineAt(sel.head);
+    return { sel, docText, lines, lineNo: line.number - 1, col: sel.head - line.from };
+  }
+
+  return [
+    {
+      key: "Enter",
+      run: (v) => {
+        const { sel, docText, lines, lineNo, col } = ctx();
+        // 有选区时按默认行为替换选区
+        if (!sel.empty) return false;
+        const plan = planEnter(lines, lineNo, col);
+        if (!plan) return false;
+
+        if (plan.type === 'split') return false;   // 交给 CodeMirror 默认拆行
+
+        const line = lines[lineNo] || '';
+        const lineObj = view.state.doc.line(lineNo + 1);
+
+        if (plan.type === 'list' || plan.type === 'quote') {
+          // 拆分点不能早于【标记末尾】——
+          // 光标在 '- ' 的空格处时按 Enter，如果就地拆行，
+          // 原来的行会变成 '-'（尾空格被吃掉），
+          // 而 '-' 后面没空格在 Markdown 里就不是列表项了。
+          //   '- 父项\n  - 子项' → '- 父项\n  -\n  - 子项'  ← 坏了
+          const li = parseListItem(line);
+          const markerEnd = li ? li.marker.length : 0;
+          const splitCol = Math.max(col, markerEnd);
+          const after = line.slice(splitCol);
+          const marker = plan.marker;
+          const insert = '\n' + marker + after;
+          view.dispatch({
+            changes: { from: lineObj.from + splitCol, to: lineObj.to, insert },
+            selection: { anchor: lineObj.from + splitCol + 1 + marker.length }
+          });
+          view.focus();
+          return true;
+        }
+
+        if (plan.type === 'end') {
+          // 结束当前块：把这一行的标记去掉，变成普通段落
+          const m = line.match(/^(\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?))/);
+          if (m) {
+            const remove = m[1].length;
+            view.dispatch({
+              changes: { from: lineObj.from, to: lineObj.from + remove, insert: '' },
+              selection: { anchor: lineObj.from }
+            });
+            view.focus();
+            return true;
+          }
+          return false;
+        }
+
+        if (plan.type === 'dedent-list') {
+          // 空的有缩进列表项 → 缩进减一级，标记保留
+          const insert = plan.marker;
+          view.dispatch({
+            changes: { from: lineObj.from, to: lineObj.to, insert },
+            selection: { anchor: lineObj.from + insert.length }
+          });
+          view.focus();
+          return true;
+        }
+
+        if (plan.type === 'table-keep') {
+          // 表格里按 Enter 不插行（Tab 才跳格）
+          return true;
+        }
+        return false;
+      }
+    },
+
+    {
+      key: "Backspace",
+      run: (v) => {
+        const { sel, lines, lineNo, col } = ctx();
+        if (!sel.empty) return false;
+        const plan = planBackspace(lines, lineNo, col);
+        if (!plan) return false;
+        const lineObj = view.state.doc.line(lineNo + 1);
+
+        if (plan.type === 'delete-prefix') {
+          view.dispatch({
+            changes: { from: lineObj.from, to: lineObj.from + plan.remove, insert: '' },
+            selection: { anchor: lineObj.from }
+          });
+          view.focus();
+          return true;
+        }
+
+        if (plan.type === 'outdent') {
+          const m = (lines[lineNo] || '').match(/^(\s+)/);
+          const remove = m ? Math.min(plan.remove, m[1].length) : plan.remove;
+          view.dispatch({
+            changes: { from: lineObj.from, to: lineObj.from + remove, insert: '' },
+            selection: { anchor: lineObj.from }
+          });
+          view.focus();
+          return true;
+        }
+        return false;
+      }
+    },
+
+    {
+      key: "Tab",
+      run: (v) => {
+        const { sel, docText, lines, lineNo, col } = ctx();
+        const plan = planTab(lines, lineNo, col, false);
+        if (!plan) {
+          // 非列表、非表格 → 保持原有的缩进行为
+          return indentMore(v) || indentLess(v);
+        }
+        const lineObj = view.state.doc.line(lineNo + 1);
+
+        if (plan.type === 'next-cell') {
+          view.dispatch({ selection: { anchor: lineObj.from + plan.col } });
+          view.focus();
+          return true;
+        }
+
+        if (plan.type === 'add-row') {
+          // 表格最后一行按 Tab → 加一行
+          const newRow = makeTableRow(plan.cells);
+          view.dispatch({
+            changes: { from: lineObj.to, insert: '\n' + newRow },
+            selection: { anchor: lineObj.to + 1 + 2 }
+          });
+          view.focus();
+          return true;
+        }
+
+        if (plan.type === 'indent') {
+          view.dispatch({
+            changes: { from: lineObj.from, insert: plan.insert },
+            selection: { anchor: sel.head + plan.insert.length }
+          });
+          view.focus();
+          return true;
+        }
+        return indentMore(v) || indentLess(v);
+      }
+    },
+
+    {
+      key: "Shift-Tab",
+      run: (v) => {
+        const { sel, lines, lineNo, col } = ctx();
+        const plan = planTab(lines, lineNo, col, true);
+        if (!plan) return indentLess(v);
+        const lineObj = view.state.doc.line(lineNo + 1);
+
+        if (plan.type === 'next-cell') {
+          view.dispatch({ selection: { anchor: lineObj.from + plan.col } });
+          view.focus();
+          return true;
+        }
+        if (plan.type === 'outdent') {
+          const m = (lines[lineNo] || '').match(/^(\s+)/);
+          const remove = m ? Math.min(plan.remove, m[1].length) : plan.remove;
+          view.dispatch({
+            changes: { from: lineObj.from, to: lineObj.from + remove, insert: '' },
+            selection: { anchor: lineObj.from }
+          });
+          view.focus();
+          return true;
+        }
+        return indentLess(v);
+      }
+    }
+  ];
 }
 
 function formattingKeymap() {
@@ -1257,8 +1560,27 @@ window.api.on([
 // 文件路径在第二个。写成 (p) => 会把 'cmd:openPath' 当成路径传下去，
 // 结果就是「双击 md 打开没反应」「最近打开点了也没反应」。
 window.api.on('cmd:openPath', async (_ch, p) => {
-  const r = await window.api.openPath(p);
-  if (r && !r.error) addTab({ path: r.path, content: r.content || '' });
+  logInfo('收到打开文件指令', { path: p });
+  try {
+    const r = await window.api.openPath(p);
+    if (r && r.error) {
+      logError('openPath', '读取文件失败: ' + r.error, { path: p });
+      toast('打开失败：' + (r.error || '未知错误'));
+      return;
+    }
+    if (!r) {
+      logError('openPath', '主进程没有返回结果', { path: p });
+      toast('打开失败：主进程无响应');
+      return;
+    }
+    addTab({ path: r.path, content: r.content || '' });
+    logInfo('文件已打开', { path: r.path, bytes: (r.content || '').length });
+  } catch (e) {
+    logError('openPath', '处理打开指令时异常: ' + (e && e.message), {
+      path: p, stack: e && e.stack
+    });
+    toast('打开失败：' + (e && e.message || '未知错误'));
+  }
 });
 
 /* 预览区点击表格不触发任何编辑 */
@@ -1317,6 +1639,8 @@ const booted = boot();
  * 跟 designPreview 一样是走查/测试专用钩子，正常使用不暴露任何东西。 */
 if (/[?&]test=1/.test(location.search)) {
   window.__qingmo = {
+    // 编辑内核的纯函数，测试用（测表格解析这类容易算错位置的逻辑）
+    __ek: { parseTableRow, isTableDivider, planEnter, planBackspace, planTab, parseListItem },
     getDoc: () => view.state.doc.toString(),
     setDoc: (text, cursor) => view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },

@@ -174,6 +174,14 @@ window.api.on('app:about', () => {
           <button class="ub-btn" data-url="https://github.com/engrecho/qingmo">项目主页</button>
           <button class="ub-btn" data-url="https://github.com/engrecho/qingmo/releases">版本发布</button>
         </div>
+        <div class="diag-box" id="diagBox">
+          <div class="diag-title">诊断</div>
+          <div class="diag-row" id="diagAssoc">文件关联：检查中…</div>
+          <div class="diag-actions">
+            <button class="ub-btn" data-act="repair-assoc">修复文件关联</button>
+            <button class="ub-btn" data-act="export-log">导出诊断日志</button>
+          </div>
+        </div>
       </div>
       <div class="modal-foot" style="justify-content:center">
         <button class="ub-btn" data-act="close">关闭</button>
@@ -181,12 +189,68 @@ window.api.on('app:about', () => {
     </div>
   `;
 
-  dlg.addEventListener('click', e => {
+  dlg.addEventListener('click', async (e) => {
     const u = e.target.closest('[data-url]');
     if (u) { window.api.openExternal(u.dataset.url); return; }
-    if (e.target.closest('[data-act="close"]')) dlg.remove();
+    const act = e.target.closest('[data-act]');
+    if (act) {
+      const a = act.dataset.act;
+      if (a === 'close') { dlg.remove(); return; }
+      if (a === 'repair-assoc') {
+        const box = document.getElementById('diagAssoc');
+        if (box) box.textContent = '文件关联：正在修复…';
+        try {
+          const r = await window.api.repairFileAssoc();
+          if (box) {
+            box.textContent = r && r.ok
+              ? '文件关联：已修复 ✅'
+              : '文件关联：修复未完全成功，请看日志';
+          }
+        } catch (err) {
+          if (box) box.textContent = '文件关联：修复出错 — ' + (err && err.message);
+        }
+        return;
+      }
+      if (a === 'export-log') {
+        const box = document.getElementById('diagAssoc');
+        if (box) box.textContent = '正在导出日志…';
+        try {
+          const r = await window.api.exportLog();
+          if (box) box.textContent = '诊断日志：已复制到剪贴板并打开文件夹';
+        } catch (err) {
+          if (box) box.textContent = '导出日志失败 — ' + (err && err.message);
+        }
+        return;
+      }
+    }
   });
 
   document.body.appendChild(dlg);
   requestAnimationFrame(() => dlg.classList.add('show'));
+
+  // 显示文件关联状态 —— 「双击 md 打不开」时能一眼看出关联指向谁
+  (async () => {
+    const box = document.getElementById('diagAssoc');
+    if (!box) return;
+    try {
+      const r = await window.api.checkFileAssoc();
+      if (!r || !r.supported) {
+        box.textContent = '文件关联：当前系统不支持检查';
+        return;
+      }
+      const md = r.list.find(x => x.ext === 'md');
+      const bad = r.list.filter(x => !x.isQingMo);
+      if (md && md.isQingMo) {
+        box.textContent = '文件关联：正常 ✅（.md → 轻墨）';
+      } else {
+        box.textContent = '文件关联：.md 当前关联到 ' +
+          (md ? md.progid : '(未关联)') + '，双击 md 可能打不开';
+      }
+      if (bad.length > 1) {
+        box.textContent += '（' + bad.length + ' 个扩展名未指向轻墨）';
+      }
+    } catch (e) {
+      box.textContent = '文件关联：检查失败 — ' + (e && e.message);
+    }
+  })();
 });

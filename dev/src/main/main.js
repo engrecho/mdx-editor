@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 // 平台差异统一走这一层（mac.js / win.js），本文件不再出现 process.platform 分支
 const platform = require('./platform');
+const logger = require('./logger');
+const fileAssoc = require('./file-assoc');
 
 let win = null;
 
@@ -59,7 +61,25 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, '../renderer/index.html'));
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    logger.info('窗口已显示');
+    win.show();
+  });
+
+  // 渲染进程崩了 / 白屏了 —— 记下来，用户反馈时能查
+  win.webContents.on('render-process-gone', (_e, details) => {
+    logger.error('渲染进程崩溃', details);
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    logger.error('页面加载失败', { code, desc, url });
+  });
+  win.webContents.on('preload-error', (_e, preloadPath, error) => {
+    logger.error('preload 加载失败', { preloadPath, message: error && error.message });
+  });
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    // 只记 warning 以上 —— info 太吵
+    if (level >= 2) logger.warn('渲染进程控制台', { level, message, line, sourceId });
+  });
 
   // 外部链接用系统浏览器打开
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -157,6 +177,9 @@ function buildMenu() {
       submenu: [
         { label: '检查更新…', click: send('app:checkUpdate') },
         { type: 'separator' },
+        { label: '修复文件关联…', click: () => repairFileAssoc() },
+        { label: '导出诊断日志…', click: () => exportDiagnostics() },
+        { type: 'separator' },
         { label: '关于轻墨', click: send('app:about') }
       ]
     }
@@ -178,10 +201,162 @@ ipcMain.handle('fs:open', async () => {
 
 ipcMain.handle('fs:openPath', async (_e, p) => {
   try {
+    logger.info('fs:openPath 读取文件', { path: p });
     pushRecent(p);
-    return { path: p, content: fs.readFileSync(p, 'utf-8') };
-  } catch (err) { return { error: String(err) }; }
+    const content = fs.readFileSync(p, 'utf-8');
+    logger.info('fs:openPath 读取成功', { path: p, bytes: content.length });
+    return { path: p, content };
+  } catch (err) {
+    logger.error('fs:openPath 读取失败', { path: p, message: err.message });
+    return { error: String(err) };
+  }
 });
+
+/* ---------- 诊断日志 ---------- */
+
+/** 渲染进程上报异常 */
+ipcMain.handle('log:report', (_e, payload) => {
+  logger.fromRenderer(payload);
+  return true;
+});
+
+/** 导出诊断日志：复制到剪贴板 + 打开日志目录 */
+ipcMain.handle('log:export', async () => {
+  const text = logger.tail(800);
+  const info = {
+    文本: text,
+    日志文件: logger.file(),
+    日志目录: logger.dir()
+  };
+  try {
+    const { clipboard } = require('electron');
+    clipboard.writeText(text);
+    logger.info('导出诊断日志', { 行数: text.split('\n').length });
+  } catch (e) {
+    logger.warn('复制到剪贴板失败', { message: e.message });
+  }
+  try {
+    shell.openPath(logger.dir());
+  } catch (e) {
+    logger.warn('打开日志目录失败', { message: e.message });
+  }
+  return info;
+});
+
+/** 只取日志文本（不打扰用户） */
+ipcMain.handle('log:tail', async () => logger.tail(800));
+
+/**
+ * 修复文件关联 —— 用户点了「帮助 → 修复文件关联」走这里。
+ *
+ * 写 HKCU（用户级），不需要管理员权限。
+ * 失败时把 reg.exe 的错误原文记进日志 —— 这样能看出是权限问题还是参数问题。
+ */
+async function repairFileAssoc() {
+  logger.info('用户请求修复文件关联');
+  let r;
+  try {
+    r = await fileAssoc.register();
+  } catch (e) {
+    logger.error('修复文件关联失败', { message: e.message, stack: e.stack });
+    try {
+      const { dialog } = require('electron');
+      dialog.showErrorBox('修复文件关联失败', e.message);
+    } catch (e2) { /* 忽略 */ }
+    return { ok: false, error: e.message };
+  }
+  logger.info('修复文件关联完成', { ok: r.ok, exe: r.exe, 明细: r.results });
+
+  // 再查一遍确认
+  const after = await fileAssoc.check();
+  const md = after.find(x => x.ext === 'md');
+  logger.info('修复后关联状态', { md关联: md && md.progid, 是否指向轻墨: md && md.isQingMo });
+
+  try {
+    const { dialog } = require('electron');
+    dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
+      type: r.ok ? 'info' : 'warning',
+      title: '修复文件关联',
+      message: r.ok ? '文件关联已修复' : '部分关联修复失败',
+      detail: [
+        r.ok ? '现在双击 .md 文件会用轻墨打开。' : '有部分扩展名没能写入注册表。',
+        '',
+        '.md 当前关联：' + (md ? md.progid : '(未知)'),
+        '打开命令：' + (md ? md.command : '(未知)'),
+        '',
+        '提示：Windows 可能会缓存关联，修复后如果仍不生效，',
+        '可在「设置 → 应用 → 默认应用」里重新指定。'
+      ].join('\n'),
+      buttons: ['好']
+    });
+  } catch (e) { /* 忽略 */ }
+
+  return { ok: r.ok, results: r.results, after };
+}
+
+/** 查询关联状态（给渲染层用） */
+ipcMain.handle('app:checkFileAssoc', async () => {
+  if (process.platform !== 'win32') return { supported: false, list: [] };
+  const list = await fileAssoc.check();
+  return { supported: true, list };
+});
+
+/** 执行修复（给渲染层用） */
+ipcMain.handle('app:repairFileAssoc', async () => repairFileAssoc());
+
+/**
+ * 导出诊断日志 —— 用户点了「导出诊断日志」时走这里。
+ *
+ * 做三件事，让用户能直接把日志发给我：
+ *   1. 复制最近日志到剪贴板
+ *   2. 打开日志所在文件夹
+ *   3. 弹窗告诉用户日志在哪、怎么发
+ */
+async function exportDiagnostics() {
+  const text = logger.tail(800);
+  const lines = text ? text.split('\n').length : 0;
+  logger.info('用户导出诊断日志', { 行数: lines });
+
+  let copied = false;
+  try {
+    const { clipboard } = require('electron');
+    clipboard.writeText(text);
+    copied = true;
+  } catch (e) {
+    logger.warn('复制到剪贴板失败', { message: e.message });
+  }
+
+  let opened = false;
+  try {
+    await shell.openPath(logger.dir());
+    opened = true;
+  } catch (e) {
+    logger.warn('打开日志目录失败', { message: e.message });
+  }
+
+  const msg = [
+    '诊断日志已准备好：',
+    '',
+    '· 日志文件：' + (logger.file() || '(无)'),
+    '· 已复制最近 ' + lines + ' 行到剪贴板' + (copied ? '' : '（复制失败）'),
+    '· 已打开日志文件夹' + (opened ? '' : '（打开失败）'),
+    '',
+    '把日志文件发给我即可定位问题。'
+  ].join('\n');
+
+  try {
+    const { dialog } = require('electron');
+    dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
+      type: 'info',
+      title: '诊断日志',
+      message: '诊断日志已导出',
+      detail: msg,
+      buttons: ['好']
+    });
+  } catch (e) { /* 弹窗失败就算了，日志已经落盘 */ }
+
+  return { text, file: logger.file(), dir: logger.dir(), lines, copied, opened };
+}
 
 ipcMain.handle('fs:save', async (_e, p, content) => {
   fs.writeFileSync(p, content, 'utf-8');
@@ -291,12 +466,20 @@ ipcMain.handle('app:openExternal', async (_e, url) => {
 });
 
 app.whenReady().then(() => {
+  // 日志系统先初始化 —— 后面的每一步都要能记录
+  logger.init(app);
+  logger.cleanup(14);
+
   // 任务栏 / Dock 图标（Windows 主要看这个）
   const icon = appIconPath();
   if (icon) {
     try { app.setAppUserModelId('cn.bajiaolu.qingmo'); } catch (e) {}
     platform.setAppIcon(app, nativeImage, icon);
   }
+  logger.info('应用就绪', {
+    icon: icon || '(未找到)',
+    pendingOpenPath: pendingOpenPath || '(无)'
+  });
 
   initRecent();
   buildMenu();
@@ -304,6 +487,27 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+
+  // 检查文件关联 —— 「双击 md 打不开」最常见的原因就是关联没指向轻墨。
+  // 记进日志，用户下次反馈时一眼就能看出来。
+  if (process.platform === 'win32') {
+    fileAssoc.check().then((list) => {
+      const md = list.find(r => r.ext === 'md');
+      const bad = list.filter(r => !r.isQingMo);
+      if (md) {
+        logger.info('文件关联检查', {
+          md关联: md.progid,
+          md命令: md.command,
+          是否指向轻墨: md.isQingMo,
+          未关联的扩展名: bad.map(r => r.ext).join(',') || '(无)'
+        });
+      }
+      if (md && !md.isQingMo) {
+        logger.warn('⚠ .md 没有关联到轻墨 —— 双击 md 很可能打不开',
+          { 当前关联: md.progid, 建议: '菜单「帮助 → 修复文件关联」' });
+      }
+    }).catch(e => logger.warn('文件关联检查失败', { message: e.message }));
+  }
 
   // 冷启动时通过命令行 / open-file 收到过文件，等窗口加载完再送进去
   if (pendingOpenPath) {
@@ -335,19 +539,44 @@ function isDocPath(p) {
   return typeof p === 'string' && DOC_EXTS.has(path.extname(p).toLowerCase());
 }
 
-/** 把文件投给渲染层：窗口没建好就先暂存，好了就直接发 */
+/**
+ * 把文件投给渲染层：窗口没建好就先暂存，好了就直接送。
+ *
+ * ⚠ 每一处失败都必须留下日志 —— 原来全是裸的 `return false`，
+ * 用户反馈「双击 md 有时候打不开」时，没有任何线索可查。
+ * 现在失败原因会明确写进日志（扩展名不支持 / 文件不存在 / 读失败）。
+ */
 function openPathInApp(p) {
-  if (!isDocPath(p)) return false;
+  if (!isDocPath(p)) {
+    logger.fileOpenAttempt(p, false, '扩展名不支持（支持: ' +
+      [...DOC_EXTS].join(', ') + '）');
+    return false;
+  }
   try {
-    if (!fs.existsSync(p)) return false;
-  } catch (e) { return false; }
+    if (!fs.existsSync(p)) {
+      logger.fileOpenAttempt(p, false, '文件不存在');
+      return false;
+    }
+  } catch (e) {
+    logger.fileOpenAttempt(p, false, '检查文件时异常: ' + e.message);
+    return false;
+  }
 
-  if (!win || win.isDestroyed()) { pendingOpenPath = p; return true; }
+  if (!win || win.isDestroyed()) {
+    logger.fileOpenAttempt(p, true, '窗口未就绪，已暂存待投喂');
+    pendingOpenPath = p;
+    return true;
+  }
   const send = () => {
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-    win.webContents.send('cmd:openPath', p);
+    try {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      win.webContents.send('cmd:openPath', p);
+      logger.fileOpenAttempt(p, true, '已投喂渲染层');
+    } catch (e) {
+      logger.fileOpenAttempt(p, false, '投喂渲染层失败: ' + e.message);
+    }
   };
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send);
   else send();

@@ -20,7 +20,7 @@
     "mac:fetch": "node scripts/mac/fetch-runtime.js",
     "export:mac": "node scripts/export-for-mac.js",
     "cache:clean": "node scripts/clean-cache.js",
-        "publish:win": "node scripts/publish.js win",
+    "publish:win": "node scripts/publish.js win",
     "publish:mac": "node scripts/publish.js mac && node scripts/verify-mac.js",
     "publish": "node scripts/publish.js all",
     "verify:asar": "node scripts/verify-asar.js",
@@ -31,8 +31,13 @@
     "gen:logo": "electron scripts/gen-logo-icons.js",
     "check:bundle": "node scripts/check-bundle-fresh.js",
     "test:edit": "electron scripts/verify-edit.js",
-    "test:all": "npm run test:live-edit && npm run test:dom && npm run test:edit",
-    "verify:mac": "node scripts/verify-mac.js"
+    "test:all": "npm run test:core && npm run test:live-edit && npm run test:dom && npm run test:edit && npm run test:keys && npm run test:log",
+    "verify:mac": "node scripts/verify-mac.js",
+    "test:core": "node scripts/test-editor-core.js",
+    "test:keys": "electron scripts/verify-keys.js",
+    "test:log": "electron scripts/verify-log.js",
+    "test:open": "electron scripts/verify-open-file.js",
+    "test:matrix": "electron scripts/syntax-matrix.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",

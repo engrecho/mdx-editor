@@ -1075,3 +1075,42 @@ body { display: flex; flex-direction: column; user-select: none; }
   color: var(--c-700);
 }
 .about-links .ub-btn:hover { background: var(--c-100); }
+
+/* 诊断区块 —— 关于弹窗底部 */
+.diag-box {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-150);
+  border-radius: 10px;
+  background: var(--c-50);
+  text-align: left;
+}
+.diag-title {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  color: var(--c-faint);
+  margin-bottom: 8px;
+}
+.diag-row {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--c-700);
+  word-break: break-all;
+}
+.diag-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.diag-actions .ub-btn {
+  border-color: var(--c-200);
+  background: var(--c-0);
+  color: var(--c-700);
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.diag-actions .ub-btn:hover { background: var(--c-100); }
+[data-theme="dark"] .diag-box { background: var(--c-50); border-color: var(--c-200); }
+[data-theme="dark"] .diag-row { color: var(--c-900); }
