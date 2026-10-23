@@ -297,14 +297,19 @@ for (const arch of ARCHES) {
       return { rename: 'QingMo.app/Contents/MacOS/' + BIN_NAME };
     }
 
-    // Electron.app → QingMo.app
-    if (name === 'Electron.app/') return { rename: 'QingMo.app/' };
-    if (name.startsWith('Electron.app/')) {
-      return { rename: 'QingMo.app/' + name.slice('Electron.app/'.length) };
-    }
-
-    // 改 Info.plist
-    if (name.endsWith('/Contents/Info.plist')) {
+    // ⚠ 改 Info.plist 必须放在下面这个「整体改名」分支【之前】！
+    //
+    // 早期版本把 Info.plist 的处理放在 startsWith('Electron.app/') 之后，
+    // 而那个分支会 return —— 于是所有 app 内的条目都被提前拦截，
+    // Info.plist 的处理成了【死代码】，plist 里 CFBundleExecutable
+    // 一直是 "Electron"，而可执行文件已经叫 QingMo。
+    // 结果：mac 上双击完全打不开（系统找不到 CFBundleExecutable 指向的文件）。
+    //
+    // 而且必须【精确匹配主 app 的路径】，不能用 endsWith：
+    // 包里共有 9 个 Info.plist（主 app + 4 个 Helper.app + 4 个 framework），
+    // endsWith('/Contents/Info.plist') 会把 Helper 的也匹配上 ——
+    // 而 Helper 的 plist 里根本没有 CFBundleExecutable 键。
+    if (name === 'Electron.app/Contents/Info.plist') {
       let plist = entryData(buf, ent).toString('utf-8');
       const setKey = (key, val) => {
         const re = new RegExp('(<key>' + key + '</key>\\s*<string>)[^<]*(</string>)');
@@ -319,11 +324,33 @@ for (const arch of ARCHES) {
       setKey('CFBundleVersion', pkg.version);
       setKey('CFBundleGetInfoString', pkg.description);
       setKey('LSApplicationCategoryType', 'public.app-category.productivity');
+      setKey('CFBundleIconFile', 'icon.icns');
       if (!/CFBundleIconFile/.test(plist)) {
         plist = plist.replace('</dict>',
           '\t<key>CFBundleIconFile</key>\n\t<string>icon.icns</string>\n</dict>');
       }
-      return { data: Buffer.from(plist, 'utf-8') };
+      // 校验：CFBundleExecutable 必须等于可执行文件名，不一致 mac 上打不开
+      const exe = /<key>CFBundleExecutable<\/key>\s*<string>([^<]*)<\/string>/.exec(plist);
+      if (!exe || exe[1] !== BIN_NAME) {
+        throw new Error('Info.plist 改写失败：CFBundleExecutable = ' +
+          (exe ? exe[1] : '(缺失)') + '，应为 ' + BIN_NAME);
+      }
+      log('   Info.plist 已改写（CFBundleExecutable=%s / DisplayName=%s）', BIN_NAME, APP_CN);
+      // ⚠ 必须同时给 rename —— 这个分支提前 return 了，
+      //    走不到下面的「Electron.app → QingMo.app」整体改名。
+      //    只给 data 的话 Info.plist 会留在 Electron.app/ 路径下，
+      //    结果包里有 QingMo.app/ 和一个孤立的 Electron.app/Contents/Info.plist，
+      //    目录结构是乱的，mac 上打不开。
+      return {
+        rename: 'QingMo.app/Contents/Info.plist',
+        data: Buffer.from(plist, 'utf-8')
+      };
+    }
+
+    // Electron.app → QingMo.app
+    if (name === 'Electron.app/') return { rename: 'QingMo.app/' };
+    if (name.startsWith('Electron.app/')) {
+      return { rename: 'QingMo.app/' + name.slice('Electron.app/'.length) };
     }
 
     return null;  // 原样复制

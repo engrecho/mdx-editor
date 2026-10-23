@@ -22,7 +22,7 @@
     "cache:clean": "node scripts/clean-cache.js",
     "gen:icons": "node scripts/gen-icons.js && node scripts/make-ico.js",
     "publish:win": "node scripts/publish.js win",
-    "publish:mac": "node scripts/publish.js mac",
+    "publish:mac": "node scripts/publish.js mac && node scripts/verify-mac.js",
     "publish": "node scripts/publish.js all",
     "verify:asar": "node scripts/verify-asar.js",
     "test:live-edit": "node scripts/test-live-edit.js",
@@ -32,7 +32,8 @@
     "gen:logo": "electron scripts/gen-logo-icons.js",
     "check:bundle": "node scripts/check-bundle-fresh.js",
     "test:edit": "electron scripts/verify-edit.js",
-    "test:all": "npm run test:live-edit && npm run test:dom && npm run test:edit"
+    "test:all": "npm run test:live-edit && npm run test:dom && npm run test:edit",
+    "verify:mac": "node scripts/verify-mac.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
