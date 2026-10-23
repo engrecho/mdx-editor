@@ -17,6 +17,9 @@ const util = require('util');
 const log = (...a) => console.error(util.format(...a));
 
 const ROOT = path.join(__dirname, '..', '..');
+// 构建产物与发布暂存统一在仓库根 release/（由 electron-builder 的 directories.output 指定），
+// mac/win 双端共用此目录，符合 AGENTS.md 双端兼容准则；发布直接从此读取，无需再传 --assets。
+// 注意：release/ 是交付物目录，与 .cache/（纯临时缓存、可一键清空）严格分开。
 const REL = path.join(ROOT, 'release');
 const REPO = 'engrecho/qingmo';
 
@@ -121,7 +124,9 @@ function uploadAsset(releaseId, filePath, name, label, token) {
 /* ---------- 主流程 ---------- */
 async function main() {
   const token = process.env.GITHUB_TOKEN;
-  if (!token) {
+  const dryRun = process.argv.includes('--dry-run');
+  // dry-run 只列清单不联网，不需要 token
+  if (!token && !dryRun) {
     log('X 缺少 GITHUB_TOKEN 环境变量');
     log('  获取方式：见项目 README 的「发布 Release」章节');
     process.exit(1);
@@ -137,18 +142,24 @@ async function main() {
     const m = name.match(/(\d+\.\d+\.\d+)/);
     const ver = m ? m[1] : '';
     // arch 与 mac 的先后顺序无所谓（electron-builder 默认命名是 -arm64-mac，
-    // 显式 --x64 又是 -mac，两种都认）
-    if (/(arm64.*mac|mac.*arm64)/i.test(name)) return `QingMo-${ver}-mac-arm64.zip`;
-    if (/(x64.*mac|mac.*x64)/i.test(name)) return `QingMo-${ver}-mac-x64.zip`;
+    // 显式 --x64 又是 -mac，两种都认）。
+    // 扩展名沿用原文件的（.zip / .dmg），不能写死 .zip ——
+    // 否则 dmg 会被传成 .zip 名，下载下来就是个坏包。
+    const ext = path.extname(name).toLowerCase();
+    if (/(arm64.*mac|mac.*arm64)/i.test(name)) return `QingMo-${ver}-mac-arm64${ext}`;
+    if (/(x64.*mac|mac.*x64)/i.test(name)) return `QingMo-${ver}-mac-x64${ext}`;
     if (/setup/i.test(name)) return `QingMo-${ver}-win-setup.exe`;
-    if (name.endsWith('.exe')) return `QingMo-${ver}-win-portable.exe`;
+    if (ext === '.exe') return `QingMo-${ver}-win-portable.exe`;
     return name.replace(/[^\x20-\x7E]/g, '_');
   };
   const labelOf = (name) => {
-    if (/(arm64.*mac|mac.*arm64)/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Apple 芯片)';
-    if (/(x64.*mac|mac.*x64)/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' macOS (Intel)';
-    if (/setup/i.test(name)) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' Windows 安装版';
-    if (name.endsWith('.exe')) return '轻墨 ' + (name.match(/\d+\.\d+\.\d+/) || [''])[0] + ' Windows 便携版';
+    const ver = (name.match(/\d+\.\d+\.\d+/) || [''])[0];
+    // dmg 是拖拽安装包，zip 是解压即用的免安装包，标注清楚免得用户选错
+    const kind = /\.dmg$/i.test(name) ? ' DMG 安装包' : (/\.zip$/i.test(name) ? ' ZIP 免安装包' : '');
+    if (/(arm64.*mac|mac.*arm64)/i.test(name)) return '轻墨 ' + ver + ' macOS (Apple 芯片)' + kind;
+    if (/(x64.*mac|mac.*x64)/i.test(name)) return '轻墨 ' + ver + ' macOS (Intel)' + kind;
+    if (/setup/i.test(name)) return '轻墨 ' + ver + ' Windows 安装版';
+    if (name.endsWith('.exe')) return '轻墨 ' + ver + ' Windows 便携版';
     return name;
   };
 
@@ -160,7 +171,10 @@ async function main() {
         // portable/ 目录太大，只上传其中的 exe
         if (e.name === 'portable') continue;
         collect(full);
-      } else if (e.name.endsWith('.exe') || e.name.endsWith('.zip')) {
+      } else if (/\.(exe|zip|dmg)$/i.test(e.name)) {
+        // .dmg 是 macOS 的标准安装包（拖进 Applications），.zip 是免安装版，
+        // 两者都发：dmg 给主流安装路径，zip 给不想装 Applications 的用户。
+        // .blockmap / .yml 是给自动更新用的辅助文件，不对外发。
         assets.push({
           path: full,
           name: asciiName(e.name),
@@ -173,12 +187,18 @@ async function main() {
   collect(ASSET_DIR);
 
   if (!assets.length) {
-    log('X 在 %s 下没找到可上传的 .exe / .zip', ASSET_DIR);
+    log('X 在 %s 下没找到可上传的 .exe / .zip / .dmg', ASSET_DIR);
     process.exit(1);
   }
 
   log('准备上传 %d 个文件:', assets.length);
-  assets.forEach(a => log('  %s  (%s MB)', a.name, (a.size / 1048576).toFixed(1)));
+  assets.forEach(a => log('  %s  (%s MB)  <- %s', a.name, (a.size / 1048576).toFixed(1), path.relative(ASSET_DIR, a.path)));
+
+  if (dryRun) {
+    log('');
+    log('--dry-run：只列出清单，未实际上传');
+    process.exit(0);
+  }
 
   // 2. 创建或复用 release
   let release = null;

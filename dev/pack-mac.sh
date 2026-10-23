@@ -6,7 +6,7 @@
 #   ./dev/pack-mac.sh --both       同时打 arm64 和 x64
 #   ./dev/pack-mac.sh --dmg        只打 dmg 安装包
 #
-# 产物位置：.cache/build/
+# 产物位置：dist/（构建输出）；最终交付物经 npm run publish:mac 同步到 release/macos/
 
 set -e
 
@@ -74,8 +74,8 @@ case "${1:-}" in
 esac
 
 echo
-echo "==> 打包完成，产物在 .cache/build/"
-ls -lh .cache/build/ | grep -iE "dmg|zip" || true
+echo "==> 打包完成，构建产物在 dist/"
+ls -lh ../dist/ 2>/dev/null | grep -iE "dmg|zip" || true
 
 cat <<'EOF'
 

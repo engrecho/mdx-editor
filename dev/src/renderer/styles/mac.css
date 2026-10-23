@@ -1,0 +1,8 @@
+/* macOS 专属样式
+ *
+ * 左上角系统红绿灯（关闭 / 最小化 / 缩放）约占 78px，
+ * 第一行左侧内容右移避让，避免与应用自家按钮叠在一起。
+ *
+ * 平台标记由 platform/index.js 写入 <html data-platform="darwin">，
+ * 这里用属性选择器兜底，保证即使标记没写上也不会影响其他平台。 */
+:root[data-platform="darwin"] .tb-row-1 .brand { padding-left: 80px; }

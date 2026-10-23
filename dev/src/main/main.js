@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
+// 平台差异统一走这一层（mac.js / win.js），本文件不再出现 process.platform 分支
+const platform = require('./platform');
 
 let win = null;
 
@@ -47,7 +49,7 @@ function createWindow() {
     backgroundColor: '#ffffff',
     title: '轻墨',
     icon: icon ? nativeImage.createFromPath(icon) : undefined,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: platform.titleBarStyle,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -66,12 +68,10 @@ function createWindow() {
   });
 }
 
-const isMac = process.platform === 'darwin';
-
 function buildMenu() {
   const send = (ch) => () => win && win.webContents.send(ch);
   const template = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    ...(platform.appMenuItem ? [platform.appMenuItem] : []),
     {
       label: '文件',
       submenu: [
@@ -92,7 +92,7 @@ function buildMenu() {
         { type: 'separator' },
         { label: '导出 HTML', accelerator: 'CmdOrCtrl+Shift+E', click: send('cmd:exportHtml') },
         { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' }
+        platform.quitMenuItem
       ]
     },
     {
@@ -243,24 +243,14 @@ ipcMain.handle('app:checkUpdate', async () => {
     const latest = String(data.tag_name || '').replace(/^v/i, '');
     if (!latest) return { ok: false, current, error: '未解析到版本号' };
 
-    // 找当前平台的资源
-    const isMac = process.platform === 'darwin';
-    const isArm = process.arch === 'arm64';
+    // 找当前平台的资源（匹配规则按平台分派，见 platform/）
     const assets = (data.assets || []).map(a => ({
       name: a.name,
       size: a.size,
       url: a.browser_download_url
     }));
 
-    // 优先匹配当前平台
-    let match = null;
-    if (isMac) {
-      match = assets.find(a => /mac.*(arm64|x64)/i.test(a.name) && (isArm ? /arm64/i.test(a.name) : /x64/i.test(a.name)))
-             || assets.find(a => /mac/i.test(a.name));
-    } else if (process.platform === 'win32') {
-      match = assets.find(a => /\.exe$/i.test(a.name) && /setup/i.test(a.name))
-             || assets.find(a => /\.exe$/i.test(a.name));
-    }
+    const match = platform.matchUpdateAsset(assets, process.arch);
 
     return {
       ok: true,
@@ -305,10 +295,7 @@ app.whenReady().then(() => {
   const icon = appIconPath();
   if (icon) {
     try { app.setAppUserModelId('cn.bajiaolu.qingmo'); } catch (e) {}
-    try {
-      if (process.platform === 'win32') app.setIcon(nativeImage.createFromPath(icon));
-      if (process.platform === 'darwin') app.dock.setIcon(nativeImage.createFromPath(icon));
-    } catch (e) {}
+    platform.setAppIcon(app, nativeImage, icon);
   }
 
   initRecent();
@@ -335,6 +322,11 @@ app.whenReady().then(() => {
 //   2. 已经开着实例时，Launch Services 会把事件送到那个实例
 // 所以 open-file 必须在模块顶层注册（早于 whenReady），并且要把
 // ready 之前收到的路径暂存起来，等窗口 did-finish-load 再投喂。
+//
+// macOS 与 Windows 的入口差异收在 platform/ 里：
+//   mac.js → app.on('open-file')
+//   win.js → 扫命令行参数
+// 本模块保留「暂存 + 投喂」的通用逻辑，两端共用。
 const DOC_EXTS = new Set(['.md', '.markdown', '.mdown', '.mkd', '.mkdn', '.mdtxt', '.mdtext', '.text', '.txt']);
 
 let pendingOpenPath = null;
@@ -362,18 +354,9 @@ function openPathInApp(p) {
   return true;
 }
 
-// macOS：Finder 双击 / Dock 拖文件进窗口
-app.on('open-file', (e, p) => {
-  e.preventDefault();
-  openPathInApp(p);
-});
+// 注册「双击文件用本应用打开」的入口（macOS 走 open-file 事件，
+// Windows / Linux 走命令行参数，差异见 platform/）。
+// 必须在模块顶层调用 —— macOS 的 open-file 可能早于 app ready。
+platform.registerFileOpen(app, isDocPath, openPathInApp);
 
-// Windows / Linux：路径在命令行参数里（跳过可执行文件本身和 electron 开关）
-for (const a of process.argv.slice(1)) {
-  if (isDocPath(a)) {
-    app.whenReady().then(() => openPathInApp(a));
-    break;
-  }
-}
-
-app.on('window-all-closed', () => { if (!isMac) app.quit(); });
+app.on('window-all-closed', () => { if (platform.quitOnAllWindowsClosed) app.quit(); });

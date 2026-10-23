@@ -35,12 +35,20 @@ const { app } = require('electron');
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
 app.whenReady().then(async () => {
-  // 等窗口加载 + 文件被投给渲染层
-  await wait(2000);
-
   const recentFile = path.join(app.getPath('userData'), 'recent.json');
   let recent = [];
-  try { recent = JSON.parse(fs.readFileSync(recentFile, 'utf-8')) || []; } catch (e) {}
+
+  // 等「文件被投给渲染层 → 渲染层回调 fs:openPath → 主进程写 recent.json」
+  // 这条链路走完。
+  //
+  // 这里用轮询而不是固定 sleep：冷启动时首屏渲染可能超过 2 秒
+  // （比如刚重建完 bundle），写死等待会偶发假失败。
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    await wait(300);
+    try { recent = JSON.parse(fs.readFileSync(recentFile, 'utf-8')) || []; } catch (e) {}
+    if (recent.includes(path.resolve(target)) || recent.includes(target)) break;
+  }
 
   const opened = recent.includes(path.resolve(target)) || recent.includes(target);
   console.log((opened ? '  PASS ' : '  FAIL ') + '命令行传入的 .md 进入最近打开列表');

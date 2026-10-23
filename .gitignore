@@ -29,7 +29,6 @@ out-*/
 dist-out/
 dist/
 release/
-release-v2/
 
 # 图标生成产物
 # 注意：icon.icns / icon.ico / icon-256.png 是打包的【必需输入】，必须入库。

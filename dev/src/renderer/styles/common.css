@@ -118,17 +118,10 @@ body { display: flex; flex-direction: column; user-select: none; }
 .tb-row-2 { height: var(--tb-row2); padding: 0 12px 0 16px; border-top: 1px solid var(--c-100); }
 
 /* 平台避让 padding 挂在行1左右集群上（而非整行），
-   这样行1内绝对定位的标题才能相对整行宽度真正居中 */
+   这样行1内绝对定位的标题才能相对整行宽度真正居中。
+   各平台的实际避让宽度见 styles/mac.css、styles/win.css。 */
 .tb-row-1 .brand    { padding-left: 16px; }
 .tb-row-1 .tb-right { padding-right: 12px; }
-
-/* macOS：左上角系统红绿灯（关闭 / 最小化 / 缩放）约占 78px，
-   第一行左侧内容右移避让，避免与应用自家按钮叠在一起。
-   平台标记由 app.js 根据 preload 暴露的 process.platform 写入
-   document.documentElement.dataset.platform（macOS 下值为 "darwin"）。 */
-:root[data-platform="darwin"] .tb-row-1 .brand { padding-left: 80px; }
-/* Windows / Linux：原生标题按钮在右上角（约 140px），第一行右侧留位 */
-:root:not([data-platform="darwin"]) .tb-row-1 .tb-right { padding-right: 148px; }
 
 /* 第一行中心标题：绝对定位居中，不受左右集群宽度影响；
    pointer-events 穿透，中心带仍可拖动窗口 */

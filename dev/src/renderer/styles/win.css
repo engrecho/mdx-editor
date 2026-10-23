@@ -1,0 +1,8 @@
+/* Windows 专属样式
+ *
+ * 原生标题按钮（关闭 / 最小化 / 缩放）在右上角，约占 140px，
+ * 第一行右侧留位避让，避免与应用自家按钮叠在一起。
+ *
+ * 非 macOS 平台（Windows / Linux）共用这一份；
+ * 平台标记由 platform/index.js 写入 <html data-platform="...">。 */
+:root:not([data-platform="darwin"]) .tb-row-1 .tb-right { padding-right: 148px; }

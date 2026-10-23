@@ -24,7 +24,7 @@ const log = (...a) => console.error(util.format(...a));
 
 const DEV = path.join(__dirname, '..');
 const ROOT = path.join(DEV, '..');
-const BASE_OUT = 'build-out';
+const BASE_OUT = 'dist';
 
 const target = process.argv[2] || 'win';
 const flavor = process.argv[3];

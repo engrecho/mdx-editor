@@ -12,12 +12,10 @@ import { tags as t } from '@lezer/highlight';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { splitBlocks, elementToMarkdown, annotateBlocks } from './live-edit';
-
-/* 平台标记：macOS 下标题栏左侧要避让系统红绿灯（见 style.css data-platform 规则）。
-   在模块求值时就写上，首帧绘制前生效，避免闪一下默认布局。 */
-if (window.api && window.api.platform) {
-  document.documentElement.dataset.platform = window.api.platform;
-}
+// 平台标记：写入 <html data-platform="...">，供 styles/mac.css、styles/win.css
+// 做平台专属样式（macOS 标题栏左侧要避让系统红绿灯）。
+// 以副作用模块引入，保证首帧绘制前就生效，避免闪一下默认布局。
+import './platform/index.js';
 
 const DEFAULT_DOC = `# 欢迎使用轻墨
 

@@ -22,8 +22,8 @@ const log = (...a) => console.error(util.format(...a));
 
 const DEV = path.join(__dirname, '..');
 const ROOT = path.join(DEV, '..');
-// 构建产物统一放 .cache/build，不往项目根目录扔
-const base = process.argv[2] || path.join('.cache', 'build');
+// 构建产物统一放 dist/，不往项目根目录扔
+const base = process.argv[2] || 'dist';
 
 const REL = path.join(ROOT, '.cache', 'busy-check.txt');
 fs.mkdirSync(path.dirname(REL), { recursive: true });

@@ -4,11 +4,13 @@
  *
  * 用法：node scripts/publish.js [win|mac|all]
  *
- * 目录约定（中间文件统一进 .cache/，根目录保持干净）：
+ * 目录约定（三层职责严格分开）：
  *   dev/                开发目录（源码）
- *   .cache/build/       构建产物（electron-builder 输出）
+ *   dist/               构建产物（electron-builder 原始输出，transient）
+ *   .cache/             纯临时缓存（可一键清空，绝不放交付物）
  *   .cache/trash/       待删除暂存区（确认无用后可整目录删）
- *   release/            发布目录（最终交付）
+ *   release/macos/      发布目录：macOS 最终交付
+ *   release/windows/    发布目录：Windows 最终交付
  */
 const fs = require('fs');
 const path = require('path');
@@ -25,10 +27,11 @@ const ROOT = path.join(DEV, '..');
 const TRASH = path.join('.cache', 'trash');
 
 // 候选输出目录：
-//   首选 .cache/build/（当前约定），后面几个是历史遗留的目录名，
+//   首选 dist/（当前约定），后面几个是历史遗留的目录名，
 //   electron-builder 的 directories.output 改过几次，旧目录里可能还留着旧产物。
 //   按「版本号取最新」而不是「按目录顺序」来挑。
 const OUT_CANDIDATES = [
+  'dist',
   path.join('.cache', 'build'),
   path.join('.cache', 'build-out'),
   'build-out',
@@ -194,24 +197,29 @@ if (target === 'mac' || target === 'all') {
   log('同步 macOS...');
   const macDir = path.join(REL, 'macos');
   fs.mkdirSync(macDir, { recursive: true });
-  // mac zip：取版本号最新的
+  // mac 交付物：.zip（解压即用，免安装）+ .dmg（拖进 Applications，标准安装方式）
+  //
+  // 两种都发。dmg 是 macOS 用户最主流的安装路径，zip 留给不想往
+  // Applications 里塞东西、或者想在多台机器上快速分发的场景。
   //
   // 顺序很重要：先挑出新的，确认有货了再挪走旧的。
   // 反过来的话，一旦候选目录里没有新产物（比如刚改了输出目录），
   // 旧的会被挪走而新的拷不上，release/macos 就空了。
-  const macZips = pickNewest('.zip');
-  if (!macZips.length) {
-    log('  ⚠ 没找到新的 mac zip，保留 release/macos/ 现有内容不动');
-  } else {
-    const oldZips = path.join(ROOT, TRASH, 'publish-old-zip-' + Date.now());
-    for (const f of fs.existsSync(macDir) ? fs.readdirSync(macDir) : []) {
-      if (!f.endsWith('.zip')) continue;
-      try {
-        fs.mkdirSync(oldZips, { recursive: true });
-        fs.renameSync(path.join(macDir, f), path.join(oldZips, f));
-      } catch (e) { log('  ⚠ 旧 zip 挪动失败:', f); }
+  for (const ext of ['.zip', '.dmg']) {
+    const found = pickNewest(ext);
+    if (!found.length) {
+      log('  ⚠ 没找到新的 mac ' + ext + '，保留 release/macos/ 现有内容不动');
+      continue;
     }
-    for (const a of macZips) {
+    const oldDir = path.join(ROOT, TRASH, 'publish-old' + ext.replace('.', '-') + '-' + Date.now());
+    for (const f of fs.existsSync(macDir) ? fs.readdirSync(macDir) : []) {
+      if (!f.endsWith(ext)) continue;
+      try {
+        fs.mkdirSync(oldDir, { recursive: true });
+        fs.renameSync(path.join(macDir, f), path.join(oldDir, f));
+      } catch (e) { log('  ⚠ 旧文件挪动失败:', f); }
+    }
+    for (const a of found) {
       fs.copyFileSync(a.path, path.join(macDir, path.basename(a.path)));
       log('  ✓', path.basename(a.path));
     }

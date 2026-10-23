@@ -56,12 +56,12 @@
     "appId": "cn.bajiaolu.qingmo",
     "productName": "轻墨",
     "directories": {
-      "output": "../.cache/build"
+      "output": "../dist"
     },
     "files": [
       "src/main/**/*",
       "src/renderer/index.html",
-      "src/renderer/style.css",
+      "src/renderer/styles/**/*",
       "src/renderer/app.bundle.js",
       "src/renderer/update.bundle.js",
       "package.json"
