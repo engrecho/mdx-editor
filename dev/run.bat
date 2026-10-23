@@ -19,7 +19,7 @@ if "%~1"=="pack" (
   call npm run build:renderer
   npx electron-builder --win
   echo.
-  echo 打包完成，产物在 build-output\
+  echo 打包完成，产物在 .cache\build\
   pause
   exit /b
 )
@@ -35,6 +35,18 @@ if "%~1"=="packmac" (
 if not exist node_modules (
   echo 首次运行，正在安装依赖...
   call npm install
+)
+
+rem 必须重建渲染层：app.bundle.js 是 esbuild 产物且不入库，
+rem 而 index.html 引用的是它。不重建就跑的是旧代码，
+rem 而且 HTML 与 JS 版本还不匹配 —— 症状是各种说不清的怪 bug。
+rem （v1.4.0 / v1.5.0 连续两个版本踩过这个坑）
+echo 正在构建渲染层...
+call npm run build:renderer
+if errorlevel 1 (
+  echo 构建失败，终止
+  pause
+  exit /b 1
 )
 
 echo 正在启动轻墨...

@@ -29,7 +29,10 @@
     "test:dom": "node scripts/test-dom.js",
     "test:assoc": "electron scripts/test-file-association.js",
     "verify:ui": "electron scripts/verify-ui.js",
-    "gen:logo": "electron scripts/gen-logo-icons.js"
+    "gen:logo": "electron scripts/gen-logo-icons.js",
+    "check:bundle": "node scripts/check-bundle-fresh.js",
+    "test:edit": "electron scripts/verify-edit.js",
+    "test:all": "npm run test:live-edit && npm run test:dom && npm run test:edit"
   },
   "devDependencies": {
     "electron": "^33.0.0",

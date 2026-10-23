@@ -761,10 +761,25 @@ function wrap(before, after) {
     replaceSelection(before + after, before.length);
     return;
   }
-  // 已包裹则取消包裹
-  const beforeText = view.state.sliceDoc(Math.max(0, from - before.length), from);
-  const afterText = view.state.sliceDoc(to, Math.min(view.state.doc.length, to + after.length));
-  if (beforeText === before && afterText === after) {
+  // 判断「是否已包裹」。
+  //
+  // 不能只看「前 N 个字符 == before」—— 那样嵌套格式会互相破坏：
+  //   文档是 **文字**（粗体），选区正好是「文字」
+  //   点斜体时 before='*'，取到的前 1 个字符是粗体 '**' 的第二个 '*'
+  //   → 误判成「已经斜体了」→ 走取消分支 → 粗体被吃掉，文档变成 *文字*
+  //
+  // 所以还要确认这个包裹是【独立】的：包裹标记的前后不能再是同类标记字符。
+  const docLen = view.state.doc.length;
+  const beforeStart = Math.max(0, from - before.length);
+  const beforeText = view.state.sliceDoc(beforeStart, from);
+  const afterText = view.state.sliceDoc(to, Math.min(docLen, to + after.length));
+  // 包裹前面的那个字符 / 后面的那个字符
+  const charBefore = beforeStart > 0 ? view.state.sliceDoc(beforeStart - 1, beforeStart) : '';
+  const charAfter = (to + after.length) < docLen
+    ? view.state.sliceDoc(to + after.length, to + after.length + 1) : '';
+  const standalone = !charBefore.includes(before[0]) && !charAfter.includes(after[0]);
+
+  if (beforeText === before && afterText === after && standalone) {
     view.dispatch({
       changes: [
         { from: from - before.length, to, insert: text },
@@ -811,9 +826,12 @@ function insertTable() {
     const cols = Math.max(2, sel.length);
     const head = sel.length >= cols ? sel.slice(0, cols) : Array.from({ length: cols }, (_, i) => sel[i] || `列${i + 1}`);
     const rows = sel.length > cols ? sel.slice(cols) : [];
+    // 空行必须跟表头列数一致 —— 早期版本硬编码了 '|  |  |'（两列），
+    // 表头是三列时就生成了列数不齐的表格，渲染出来会错位。
+    const emptyRow = '| ' + head.map(() => ' ').join(' | ') + ' |';
     const t2 =
       `| ${head.join(' | ')} |\n| ${head.map(() => '---').join(' | ')} |\n` +
-      (rows.length ? rows.map(r => `| ${r} | ${head.slice(1).map(() => ' ').join(' | ')} |`).join('\n') + '\n' : '|  |  |\n');
+      (rows.length ? rows.map(r => `| ${r} | ${head.slice(1).map(() => ' ').join(' | ')} |`).join('\n') + '\n' : emptyRow + '\n');
     replaceSelection(t2, 2);
   } else {
     insertBlock(tpl, null);
@@ -1304,7 +1322,10 @@ if (/[?&]test=1/.test(location.search)) {
     getDoc: () => view.state.doc.toString(),
     setDoc: (text, cursor) => view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
-      selection: { anchor: cursor == null ? 0 : cursor }
+      // 光标要夹在新文档范围内。文档变短时旧的 selection 会越界，
+      // 后续再 dispatch 一个合法 selection 就会报
+      // "Selection points outside of document"。
+      selection: { anchor: Math.min(cursor == null ? 0 : cursor, text.length) }
     }),
     setCursor: (pos) => view.dispatch({ selection: { anchor: pos } }),
     run,

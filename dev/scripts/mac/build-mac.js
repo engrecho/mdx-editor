@@ -24,12 +24,27 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const util = require('util');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const log = (...a) => console.error(util.format(...a));
 
 const DEV = path.join(__dirname, '..', '..');
 const ROOT = path.join(DEV, '..');   // 仓库根
+
+/* ============================================================
+   先重建渲染层
+   ============================================================
+   app.bundle.js 是 esbuild 产物且不入库，index.html 引用的就是它。
+   这里不重建就会把【旧的】bundle 打进 mac 包 —— 改过 app.js 的人
+   会发现「代码改了但完全没效果」。v1.5.0 就是这么漏的。 */
+{
+  const rb = spawnSync(process.execPath, [path.join(DEV, 'scripts', 'build-renderer.js')],
+    { stdio: 'inherit', cwd: DEV });
+  if (rb.status !== 0) {
+    log('X 渲染层构建失败，中止');
+    process.exit(1);
+  }
+}
 const CACHE = path.join(ROOT, '.cache', 'electron-mac');
 const TMP = path.join(ROOT, '.cache', 'mac-build');
 const OUT = path.join(ROOT, '.cache', 'build', 'mac');
