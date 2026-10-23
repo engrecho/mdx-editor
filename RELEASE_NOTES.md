@@ -7,6 +7,19 @@
 - 基于 v1.5.0 之后的最新云端修复重新打包（双击打开 .md、嵌套格式互相破坏修复）
 - 清理无用文件：移除旧 Windows/Edge 图标生成脚本（gen-icons.js）与遗留 SVG / 各尺寸临时 PNG
 - 补充开发准则：修改代码必须区分 Windows / macOS 双端兼容性（详见 AGENTS.md 第 4 条）
+- **平台差异代码按端拆分**：mac 与 Windows 各自独立的目录维护（详见下方「工程改进」）
+- **macOS 资产新增 dmg 安装包**：下载地址现在同时提供 dmg 与 zip 两种（详见下方「资产下载」）
+
+## 资产下载：dmg 与 zip 两种
+
+macOS 这次提供了两个包，按习惯挑一个：
+
+| 包 | 适合谁 | 怎么用 |
+|---|---|---|
+| **`.dmg`（新增）** | 大多数人 | 双击挂载 → 把「轻墨」拖进 Applications → 打开即用。首次若提示「无法验证开发者」，右键点 app → 选「打开」，只需做一次 |
+| **`.zip`** | 不想往 Applications 里装东西、或要在多台机器快速分发 | 解压即用，不写系统目录 |
+
+Windows 侧维持原样：`setup` 安装版 + `portable` 便携版。
 
 ## 修复：双击 .md 文件打不开
 
@@ -37,6 +50,9 @@ macOS 上双击 Markdown 文件、或者右键「打开方式」指定轻墨都�
 
 ## 工程改进
 
+- **平台差异代码按端拆分**：以前 mac 与 Windows 的差异散落在主流程里（标题栏样式、应用菜单、退出行为、Dock/任务栏图标、文件打开入口、更新包匹配），现按端拆成独立目录 —— 主进程 `src/main/platform/{mac,win}.js`、渲染层 `src/renderer/styles/{mac,win}.css`。以后加新平台只需加一个文件，不用再动主流程
+- **目录职责分层**：`dist/`（构建输出）→ `release/macos` `release/windows`（交付物，双端分开）→ `.cache/`（纯缓存，一键清空不影响任何交付物）
+- **发布脚本支持 dmg**：以前只收集 zip，macOS 最常见的 dmg 安装包发不出去；现在 dmg 与 zip 一起发，且上传名按原扩展名生成（避免 dmg 被传成 `.zip` 名导致下载到坏包）
 - 新增 `scripts/verify-ui.js`：真机窗口验证列表插入位置与 live-edit 焦点保持（10 项）
 - 新增 `scripts/test-file-association.js`：真实主进程 + 真实命令行路径验证文件关联
 - mac 构建产物统一命名 `${name}-${version}-mac-${arch}.${ext}`，发布脚本的资产名不再错乱
