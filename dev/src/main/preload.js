@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('api', {
   exportHtml: (html, name) => ipcRenderer.invoke('fs:exportHtml', html, name),
   rebuildMenu: () => ipcRenderer.invoke('app:rebuildMenu'),
   checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
+  // 自动更新（Windows 安装版）
+  autoCheck: (silent) => ipcRenderer.invoke('app:autoCheck', silent),
+  autoUpdate: () => ipcRenderer.invoke('app:autoUpdate'),
+  autoState: () => ipcRenderer.invoke('app:autoState'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   // 诊断日志：渲染进程把异常送回主进程统一落盘
   reportLog: (payload) => ipcRenderer.invoke('log:report', payload),

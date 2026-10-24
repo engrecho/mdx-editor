@@ -31,13 +31,17 @@
     "gen:logo": "electron scripts/gen-logo-icons.js",
     "check:bundle": "node scripts/check-bundle-fresh.js",
     "test:edit": "electron scripts/verify-edit.js",
-    "test:all": "npm run test:core && npm run test:live-edit && npm run test:dom && npm run test:edit && npm run test:keys && npm run test:log",
+    "test:all": "npm run test:core && npm run test:live-edit && npm run test:dom && npm run test:edit && npm run test:keys && npm run test:log && npm run test:update && npm run test:update-fallback",
     "verify:mac": "node scripts/verify-mac.js",
     "test:core": "node scripts/test-editor-core.js",
     "test:keys": "electron scripts/verify-keys.js",
     "test:log": "electron scripts/verify-log.js",
     "test:open": "electron scripts/verify-open-file.js",
-    "test:matrix": "electron scripts/syntax-matrix.js"
+    "test:matrix": "electron scripts/syntax-matrix.js",
+    "test:update": "electron scripts/verify-update.js",
+    "test:update-fallback": "electron scripts/verify-update-fallback.js",
+    "test:auto-update": "electron scripts/verify-auto-update-runtime.js",
+    "verify:auto-update": "node scripts/verify-auto-update.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -54,6 +58,7 @@
     "@codemirror/view": "^6.28.0",
     "@lezer/highlight": "^1.2.0",
     "dompurify": "^3.1.5",
+    "electron-updater": "^6.8.11",
     "esbuild": "^0.28.2",
     "marked": "^14.0.0"
   },
@@ -123,7 +128,9 @@
       "installerLanguages": [
         "zh_CN"
       ],
-      "language": "2052"
+      "language": 2052,
+      "artifactName": "QingMo-${version}-win-setup.${ext}",
+      "differentialPackage": true
     },
     "extraResources": [
       {
@@ -133,7 +140,18 @@
           "icon-256.png"
         ]
       }
-    ]
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "engrecho",
+        "repo": "qingmo",
+        "channel": "latest"
+      }
+    ],
+    "portable": {
+      "artifactName": "QingMo-${version}-win-portable.${ext}"
+    }
   },
   "productName": "轻墨"
 }

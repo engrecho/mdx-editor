@@ -161,6 +161,41 @@ if (target === 'win' || target === 'all') {
     }
   }
 
+  // ⚠ latest.yml 必须一起同步 —— 它是 electron-updater 的更新清单
+  //   （版本号、文件名、sha512、blockmap 地址）。
+  //   少了它，客户端「检查更新」能查到版本，但「一键更新」下载会直接 404。
+  //
+  //   它和 exe 是配对的：yml 里记的 path 必须是上面刚拷进来的那个 exe 名，
+  //   sha512 也要对得上。所以要和 exe 一起从同一个输出目录取。
+  {
+    let ymlSrc = null;
+    for (const out of OUT_CANDIDATES) {
+      const p = path.join(out, 'latest.yml');
+      if (fs.existsSync(p)) { ymlSrc = p; break; }
+    }
+    if (ymlSrc) {
+      // 旧 yml 先挪走（内容变了必须换掉，否则指向旧版本）
+      const oldYml = path.join(winDir, 'latest.yml');
+      if (fs.existsSync(oldYml)) {
+        const tmpDir = path.join(ROOT, TRASH, 'publish-old-yml-' + Date.now());
+        try {
+          fs.mkdirSync(tmpDir, { recursive: true });
+          fs.renameSync(oldYml, path.join(tmpDir, 'latest.yml'));
+        } catch (e) { /* 挪不动就覆盖 */ }
+      }
+      fs.copyFileSync(ymlSrc, path.join(winDir, 'latest.yml'));
+      // 校验：yml 里的 path 必须在 release/windows/ 里真实存在
+      const yml = fs.readFileSync(ymlSrc, 'utf-8');
+      const pm = /^\s*path:\s*(.+)$/m.exec(yml);
+      const named = pm ? pm[1].trim() : '';
+      const exists = named && fs.existsSync(path.join(winDir, named));
+      log(exists ? '  ✓ latest.yml（path=' + named + '）' :
+          '  ✗ latest.yml 的 path「' + named + '」在 release/windows/ 里不存在 —— 一键更新会 404');
+    } else {
+      log('  ⚠ 没找到 latest.yml —— 一键更新不可用（检查 package.json 的 build.publish）');
+    }
+  }
+
   // 免安装目录版：找版本号最新的 win-unpacked
   let best = null;
   for (const out of OUT_CANDIDATES) {

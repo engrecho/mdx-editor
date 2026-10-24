@@ -5,6 +5,8 @@ const fs = require('fs');
 const platform = require('./platform');
 const logger = require('./logger');
 const fileAssoc = require('./file-assoc');
+const autoUpdate = require('./auto-update');
+const { compareVersion } = require('./version');
 
 let win = null;
 
@@ -246,6 +248,25 @@ ipcMain.handle('log:export', async () => {
 /** 只取日志文本（不打扰用户） */
 ipcMain.handle('log:tail', async () => logger.tail(800));
 
+/* ---------- 自动更新 ---------- */
+
+/** 检查自动更新（Windows 安装版可用） */
+ipcMain.handle('app:autoCheck', async (_e, silent) => {
+  const r = await autoUpdate.check(!!silent);
+  return { ...r, supported: !autoUpdate.isPortable() };
+});
+
+/** 下载并安装更新 */
+ipcMain.handle('app:autoUpdate', async () => {
+  if (autoUpdate.isPortable()) {
+    return { ok: false, error: '便携版不支持自动更新，请到发布页下载新版本' };
+  }
+  return autoUpdate.downloadAndInstall();
+});
+
+/** 自动更新状态（给渲染层轮询进度用） */
+ipcMain.handle('app:autoState', async () => autoUpdate.state());
+
 /**
  * 修复文件关联 —— 用户点了「帮助 → 修复文件关联」走这里。
  *
@@ -397,6 +418,51 @@ ipcMain.on('app:getVersion', (e) => { e.returnValue = app.getVersion(); });
 // 接口：GET https://api.github.com/repos/{owner}/{repo}/releases/latest
 const UPDATE_REPO = 'engrecho/qingmo';
 const UPDATE_API = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+// 降级路径：GitHub 的 releases/latest 是 302 重定向到具体 tag，
+// 从 Location 头就能拿到版本号 —— 不走 API，没有 60 次/小时的匿名限流。
+const UPDATE_REDIRECT = `https://github.com/${UPDATE_REPO}/releases/latest`;
+
+/**
+ * 限流时的降级检查：只拿版本号，拿不到资源列表。
+ *
+ * 为什么需要：GitHub API 匿名请求是 60 次/小时/IP，
+ * 装机量一大必然撞上 403。那时代码会直接报「检查失败」，
+ * 用户还以为没有新版本。
+ */
+async function checkUpdateFallback(current) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(UPDATE_REDIRECT, {
+      redirect: 'manual',      // 不自动跟随，从 Location 头里读 tag
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'QingMo-Update-Check' }
+    });
+    clearTimeout(timer);
+    // 手动重定向时是 302，Location 形如 .../releases/tag/v1.5.1
+    const loc = res.headers.get('location') || '';
+    const m = /\/releases\/tag\/([^/?#]+)/.exec(loc);
+    if (!m) return { ok: false, current, error: `HTTP ${res.status}（且拿不到版本号）` };
+    const latest = m[1].replace(/^v/i, '');
+    return {
+      ok: true,
+      current,
+      latest,
+      hasUpdate: false,          // 拿不到资源列表 → 不知道能不能直接更新
+      newerExists: compareVersion(latest, current) > 0,
+      platformReady: false,
+      degraded: true,            // 标记：这是降级结果
+      releaseUrl: `https://github.com/${UPDATE_REPO}/releases/latest`,
+      releaseName: `v${latest}`,
+      notes: '',
+      assets: [],
+      match: null
+    };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, current, error: e.name === 'AbortError' ? '请求超时' : e.message };
+  }
+}
 
 ipcMain.handle('app:checkUpdate', async () => {
   const current = app.getVersion();
@@ -412,6 +478,11 @@ ipcMain.handle('app:checkUpdate', async () => {
     });
     clearTimeout(timer);
     if (!res.ok) {
+      // 403 = 触发速率限制（匿名 60 次/小时）→ 走降级
+      if (res.status === 403 || res.status === 429) {
+        logger.warn('更新检查触发 GitHub 限流，改用降级路径', { status: res.status });
+        return await checkUpdateFallback(current);
+      }
       return { ok: false, current, error: `HTTP ${res.status}` };
     }
     const data = await res.json();
@@ -427,11 +498,27 @@ ipcMain.handle('app:checkUpdate', async () => {
 
     const match = platform.matchUpdateAsset(assets, process.arch);
 
+    // ⚠ 有新版 ≠ 当前平台能下载到新版。
+    //
+    // 实际踩过：v1.5.0 / v1.5.1 的 GitHub Release 只发了 mac 的资源，
+    // Windows 用户检查更新会看到「发现新版本 v1.5.1」，点下载却跳到
+    // release 页面 —— 里面一个 .exe 都没有。
+    //
+    // 所以要把「版本更高」和「当前平台有对应资源」分开：
+    //   hasUpdate     —— 有新版本【且】当前平台能拿到，可以直接更新
+    //   newerExists   —— 有新版本，但当前平台还没发（提示用户去 release 页看）
+    const newer = compareVersion(latest, current) > 0;
+    const platformReady = !!match;
+
     return {
       ok: true,
       current,
       latest,
-      hasUpdate: compareVersion(latest, current) > 0,
+      hasUpdate: newer && platformReady,
+      newerExists: newer,
+      platformReady,
+      portable: autoUpdate.isPortable(),
+      platformName: platform.id === 'win' ? 'Windows' : (platform.id === 'mac' ? 'macOS' : platform.id),
       releaseUrl: data.html_url,
       releaseName: data.name,
       notes: (data.body || '').slice(0, 2000),
@@ -440,20 +527,17 @@ ipcMain.handle('app:checkUpdate', async () => {
       match
     };
   } catch (e) {
-    return { ok: false, current, error: e.name === 'AbortError' ? '请求超时' : e.message };
+    // 网络异常也走降级 —— GitHub API 挂了就至少还能告诉用户「有没有新版」
+    const err = e.name === 'AbortError' ? '请求超时' : e.message;
+    logger.warn('更新检查失败，尝试降级路径', { error: err });
+    const fb = await checkUpdateFallback(current);
+    if (fb.ok) return fb;
+    return { ok: false, current, error: err };
   }
 });
 
-/** 语义化版本比较：a > b 返回正数 */
-function compareVersion(a, b) {
-  const pa = String(a).split('.').map(x => parseInt(x, 10) || 0);
-  const pb = String(b).split('.').map(x => parseInt(x, 10) || 0);
-  for (let i = 0; i < 3; i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0);
-    if (d !== 0) return d;
-  }
-  return 0;
-}
+/* compareVersion 已移到 ./version —— 测试要复用同一份实现，
+   避免「测试里复制一份」导致实现改了测试没改。 */
 
 /** 在系统浏览器打开下载页 */
 ipcMain.handle('app:openExternal', async (_e, url) => {

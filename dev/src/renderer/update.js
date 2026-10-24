@@ -44,12 +44,26 @@ async function checkUpdate(force = false) {
 function showUpdateBanner(info) {
   hideUpdateBanner();
 
+  // 当前平台没发对应资源时，措辞要诚实 ——
+  // 不能让用户以为点「前往下载」就能拿到本平台的包。
+  const canDownload = !!info.match;
+  let text;
+  if (canDownload) {
+    text = `发现新版本 <b>${info.latest}</b>（当前 ${info.current}）`;
+  } else if (info.degraded) {
+    // 降级模式：只拿到了版本号，不知道有没有本平台的包
+    text = `新版本 <b>${info.latest}</b> 可用（当前 ${info.current}）`;
+  } else {
+    text = `新版本 <b>${info.latest}</b> 已发布（当前 ${info.current}），`
+      + `<b>${info.platformName || '当前平台'}</b> 版暂未提供`;
+  }
+
   const bar = document.createElement('div');
   bar.className = 'update-bar';
   bar.innerHTML = `
     <span class="ub-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg></span>
-    <span class="ub-text">发现新版本 <b>${info.latest}</b>（当前 ${info.current}）</span>
-    <button class="ub-btn primary" data-act="download">前往下载</button>
+    <span class="ub-text">${text}</span>
+    <button class="ub-btn primary" data-act="download">${canDownload ? '前往下载' : '查看发布页'}</button>
     <button class="ub-btn" data-act="details">查看详情</button>
     <button class="ub-btn icon" data-act="dismiss" title="忽略此版本">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -61,7 +75,7 @@ function showUpdateBanner(info) {
     if (!btn) return;
     const act = btn.dataset.act;
     if (act === 'download') {
-      // 优先直接下载匹配当前平台的资源
+      // 有匹配资源就直接下载；没有就打开 release 页（里面有说明）
       const url = (info.match && info.match.url) || info.releaseUrl;
       window.api.openExternal(url);
     } else if (act === 'details') {
@@ -96,6 +110,9 @@ function showUpdateDialog(info) {
       <button class="ub-btn" data-url="${escapeHtml(a.url)}">下载</button>
     </li>`).join('');
 
+  // 一键更新按钮：只在「当前平台有对应资源」且「不是便携版」时出现
+  const canAuto = !!info.match && info.platformReady !== false && !info.portable;
+
   const dlg = document.createElement('div');
   dlg.id = 'updateDialog';
   dlg.className = 'modal-mask';
@@ -110,30 +127,89 @@ function showUpdateDialog(info) {
       <div class="modal-body">
         <p class="ud-ver">当前 <b>${info.current}</b> → 最新 <b class="ud-new">${info.latest}</b></p>
         ${info.publishedAt ? `<p class="ud-date">发布于 ${new Date(info.publishedAt).toLocaleDateString('zh-CN')}</p>` : ''}
+        ${info.platformReady === false && !info.degraded ? `<p class="ud-warn">${info.platformName || '当前平台'}版暂未提供，可先看看其他平台的包</p>` : ''}
+        ${info.degraded ? '<p class="ud-warn">GitHub 接口暂时限流，只取到了版本号。点「打开发布页」可直接下载。</p>' : ''}
         ${info.notes ? `<pre class="ud-notes">${escapeHtml(info.notes)}</pre>` : ''}
+        <div class="ud-progress" id="udProgress" style="display:none">
+          <div class="udp-bar"><div class="udp-fill" id="udpFill"></div></div>
+          <div class="udp-text" id="udpText">准备下载…</div>
+        </div>
+        ${info.degraded ? '' : `
         <div class="ud-assets">
           <div class="ud-assets-title">下载</div>
           <ul class="ua-list">${assets || '<li class="ua-empty">该版本没有附件</li>'}</ul>
-        </div>
+        </div>`}
       </div>
       <div class="modal-foot">
         <button class="ub-btn" data-act="close">稍后再说</button>
-        <button class="ub-btn primary" data-act="release">打开发布页</button>
+        ${canAuto ? '<button class="ub-btn primary" data-act="auto">一键更新</button>' : ''}
+        <button class="ub-btn ${canAuto ? '' : 'primary'}" data-act="release">打开发布页</button>
       </div>
     </div>
   `;
 
-  dlg.addEventListener('click', e => {
+  dlg.addEventListener('click', async (e) => {
     const urlBtn = e.target.closest('[data-url]');
     if (urlBtn) { window.api.openExternal(urlBtn.dataset.url); return; }
     const btn = e.target.closest('[data-act]');
     if (!btn) return;
     if (btn.dataset.act === 'close') dlg.remove();
     if (btn.dataset.act === 'release') window.api.openExternal(info.releaseUrl);
+    if (btn.dataset.act === 'auto') {
+      await startAutoUpdate(dlg, btn);
+    }
   });
 
   document.body.appendChild(dlg);
   requestAnimationFrame(() => dlg.classList.add('show'));
+}
+
+/**
+ * 一键更新：下载 → 静默安装 → 重启。
+ *
+ * 走的是 electron-updater，所以：
+ *   · 只在 NSIS 安装版可用（便携版按钮根本不出现）
+ *   · 依赖 Release 上有 latest.yml（发布脚本要传）
+ *   · 装完会自动重启应用
+ */
+async function startAutoUpdate(dlg, btn) {
+  const box = dlg.querySelector('#udProgress');
+  const fill = dlg.querySelector('#udpFill');
+  const text = dlg.querySelector('#udpText');
+  btn.disabled = true;
+  btn.textContent = '准备中…';
+  if (box) box.style.display = '';
+
+  try {
+    const r = await window.api.autoUpdate();
+    if (!r || !r.ok) {
+      text.textContent = '无法自动更新：' + ((r && r.error) || '未知错误');
+      btn.disabled = false;
+      btn.textContent = '重试';
+      return;
+    }
+    text.textContent = '下载中 0%';
+
+    // 轮询进度
+    const timer = setInterval(async () => {
+      try {
+        const s = await window.api.autoState();
+        if (s && s.downloading) {
+          text.textContent = `下载中 ${s.progress}%`;
+          if (fill) fill.style.width = s.progress + '%';
+        } else if (s && s.progress > 0 && !s.downloading) {
+          text.textContent = '下载完成，正在安装…';
+        }
+      } catch (err) { /* 忽略 */ }
+    }, 500);
+
+    // 下载完成后主进程会 quitAndInstall，界面到这里就结束了
+    setTimeout(() => clearInterval(timer), 10 * 60 * 1000);
+  } catch (e) {
+    text.textContent = '更新失败：' + (e && e.message);
+    btn.disabled = false;
+    btn.textContent = '重试';
+  }
 }
 
 function escapeHtml(s) {
@@ -146,8 +222,20 @@ window.api.on('app:checkUpdate', async () => {
   const r = await checkUpdate(true);
   if (!r) { toast('无法连接更新服务'); return; }
   if (!r.ok) { toast('检查失败：' + (r.error || '未知错误')); return; }
-  if (r.hasUpdate) showUpdateDialog(r);
-  else toast('已是最新版本 ' + r.current);
+  if (r.hasUpdate) { showUpdateDialog(r); return; }
+  if (r.degraded && r.newerExists) {
+    // 降级模式：知道有新版但拿不到资源列表
+    toast(`新版本 ${r.latest} 可用，详细见发布页`);
+    showUpdateDialog(r);
+    return;
+  }
+  if (r.newerExists && !r.platformReady) {
+    // 有新版但当前平台还没发 —— 说清楚，别让用户白跑一趟
+    toast(`新版本 ${r.latest} 已发布，${r.platformName || '当前平台'}版暂未提供`);
+    showUpdateDialog(r);
+    return;
+  }
+  toast('已是最新版本 ' + r.current);
 });
 
 /* ---------- 关于对话框 ---------- */

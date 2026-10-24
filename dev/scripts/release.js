@@ -171,14 +171,23 @@ async function main() {
         // portable/ 目录太大，只上传其中的 exe
         if (e.name === 'portable') continue;
         collect(full);
-      } else if (/\.(exe|zip|dmg)$/i.test(e.name)) {
+      } else if (/\.(exe|zip|dmg|yml)$/i.test(e.name)) {
         // .dmg 是 macOS 的标准安装包（拖进 Applications），.zip 是免安装版，
         // 两者都发：dmg 给主流安装路径，zip 给不想装 Applications 的用户。
-        // .blockmap / .yml 是给自动更新用的辅助文件，不对外发。
+        //
+        // ⚠ .yml 必须一起发 —— 它是 electron-updater 的更新清单
+        //   （版本号、文件名、sha512、blockmap 地址）。
+        //   少了它，客户端的「检查更新」能找到版本，但「一键更新」会直接 404。
+        //   这个文件是公开信息，不含任何敏感信息。
+        //   .blockmap 不用发 —— electron-updater 通过 latest.yml 里的
+        //   blockMapSize 字段自动去 Release 找同名的 .blockmap。
+        const isYml = /\.yml$/i.test(e.name);
         assets.push({
           path: full,
-          name: asciiName(e.name),
-          label: labelOf(e.name),
+          // latest.yml 的名字必须保持原样（latest.yml / latest-mac.yml），
+          // 改名了 electron-updater 找不到
+          name: isYml ? e.name : asciiName(e.name),
+          label: isYml ? '自动更新清单' : labelOf(e.name),
           size: fs.statSync(full).size
         });
       }

@@ -994,6 +994,40 @@ body { display: flex; flex-direction: column; user-select: none; }
 .ud-new { color: var(--accent); }
 .ud-date { font-size: 12px; color: var(--c-400); margin-bottom: 12px; }
 
+/* 提示：当前平台没包 / 接口限流 */
+.ud-warn {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #b4741a;
+  background: rgba(210, 160, 60, .12);
+  border: 1px solid rgba(210, 160, 60, .3);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+[data-theme="dark"] .ud-warn { color: #e0a94a; }
+
+/* 自动更新下载进度 */
+.ud-progress { margin-bottom: 14px; }
+.udp-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--c-150);
+  overflow: hidden;
+}
+.udp-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width .25s ease;
+}
+.udp-text {
+  font-size: 12px;
+  color: var(--c-500);
+  margin-top: 6px;
+}
+
 .ud-notes {
   font-family: var(--mono);
   font-size: 12px;

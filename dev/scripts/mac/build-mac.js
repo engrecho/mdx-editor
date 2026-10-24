@@ -50,8 +50,18 @@ const TMP = path.join(ROOT, '.cache', 'mac-build');
 const OUT = path.join(ROOT, '.cache', 'build', 'mac');
 const ARCHES = ['arm64', 'x64'];
 
-// @electron/asar 是 ESM-only，唯一可靠入口是 CLI
-const ASAR_CLI = path.join(DEV, 'node_modules', '@electron', 'asar', 'bin', 'asar.mjs');
+// @electron/asar 是 ESM-only，唯一可靠入口是 CLI。
+//
+// ⚠ 不要硬编码入口文件名 —— 版本之间改过名：
+//   3.2.x → bin/asar.mjs
+//   3.4.1 → bin/asar.js
+// 升级依赖后就会找不到（报错 Cannot find module ... asar.mjs）。
+// 改成从 package.json 的 bin 字段读，版本变化也不会挂。
+const ASAR_CLI = (() => {
+  const pkgPath = path.join(DEV, 'node_modules', '@electron', 'asar', 'package.json');
+  const rel = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).bin.asar;
+  return path.join(DEV, 'node_modules', '@electron', 'asar', rel);
+})();
 const NODE_BIN = process.execPath;
 
 const pkg = JSON.parse(fs.readFileSync(path.join(DEV, 'package.json'), 'utf-8'));
