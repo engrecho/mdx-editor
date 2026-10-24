@@ -37,14 +37,34 @@ function safeJson(v) {
 /** 通过 IPC 送到主进程 */
 function report(kind, message, extra) {
   const item = localRecord(kind, message, extra);
+
+  // ⚠⚠ 必须吞掉 IPC 的失败，而且不能让它变成未捕获的 Promise 拒绝。
+  //
+  // 这是「编辑器完全打不了字」的根因（实测：20 次异常 → 8856 次 IPC 报错）：
+  //   report() → api.reportLog() 的 Promise 拒绝 → unhandledrejection
+  //            → 又触发 report() → 又拒绝 → ……
+  // 渲染进程被无限上报打满，编辑器就卡住没反应了。
+  //
+  // 现在：① catch 住拒绝 ② 连续失败到上限就停止上报。
+  if (failStreak >= MAX_FAIL) return item;
   try {
     const api = window.api;
     if (api && typeof api.reportLog === 'function') {
-      api.reportLog({ kind, message, stack: item.extra, extra: '' });
+      const p = api.reportLog({ kind, message, stack: item.extra, extra: '' });
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => { failStreak++; });
+      } else {
+        failStreak = 0;
+      }
     }
-  } catch (e) { /* IPC 不通就算了，本地还有记录 */ }
+  } catch (e) {
+    failStreak++;
+  }
   return item;
 }
+
+let failStreak = 0;
+const MAX_FAIL = 5;
 
 /** 挂上全局错误捕获（在应用启动早期调用） */
 function install() {

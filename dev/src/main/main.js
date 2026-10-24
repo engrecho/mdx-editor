@@ -179,6 +179,8 @@ function buildMenu() {
       submenu: [
         { label: '检查更新…', click: send('app:checkUpdate') },
         { type: 'separator' },
+        { label: 'Markdown 编辑手感', type: 'checkbox', checked: true, click: (item) => toggleMdKeymap(item) },
+        { type: 'separator' },
         { label: '修复文件关联…', click: () => repairFileAssoc() },
         { label: '导出诊断日志…', click: () => exportDiagnostics() },
         { type: 'separator' },
@@ -247,6 +249,38 @@ ipcMain.handle('log:export', async () => {
 
 /** 只取日志文本（不打扰用户） */
 ipcMain.handle('log:tail', async () => logger.tail(800));
+
+/**
+ * 切换「Markdown 编辑手感」（列表续行 / Backspace 取消标记 / 表格跳格）。
+ *
+ * 这些增强会「抢」默认按键行为，万一在某种输入场景下出问题
+ * （最典型是中文输入法），用户需要能立刻关掉 —— 不用重启、不用改配置。
+ *
+ * 状态存在渲染层的 localStorage 里，主进程通过 IPC 问渲染层要当前值，
+ * 再据此更新菜单的勾选状态。
+ */
+async function toggleMdKeymap(menuItem) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    const cur = await win.webContents.executeJavaScript(
+      'window.__mdKeymapEnabled ? window.__mdKeymapEnabled() : true');
+    const next = !cur;
+    win.webContents.send('app:setMdKeymap', next);
+    menuItem.checked = next;
+    logger.info('切换 Markdown 编辑手感', { enabled: next });
+  } catch (e) {
+    logger.warn('切换 Markdown 编辑手感失败', { message: e.message });
+  }
+}
+
+/** 渲染层问当前状态（菜单初始化时同步勾选） */
+ipcMain.handle('app:getMdKeymap', async () => {
+  if (!win || win.isDestroyed()) return true;
+  try {
+    return await win.webContents.executeJavaScript(
+      'window.__mdKeymapEnabled ? window.__mdKeymapEnabled() : true');
+  } catch (e) { return true; }
+});
 
 /* ---------- 自动更新 ---------- */
 

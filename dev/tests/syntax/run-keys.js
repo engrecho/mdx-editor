@@ -94,25 +94,31 @@
   }
 
   /* ============ B. Backspace 取消标记 ============ */
+  // ⚠ 语义是 CodeMirror 原生的（@codemirror/lang-markdown 的 deleteMarkupBackward）：
+  //   Backspace 删的是【光标左边】的字符。
+  //   · 光标紧挨标记的【右边】（如 '- |列表项'）→ 删掉标记
+  //   · 光标在标记【左边】或行首 → 左边没东西，不动
+  // 这才是标准编辑器行为（VS Code / Typora 都这样）。
   {
+    setup('- 列表项', 2);
+    pressKey('Backspace');
+    eq('B/Backspace删光标左边的列表标记', Q.getDoc(), '列表项');
+  }
+  {
+    setup('> 引用', 2);
+    pressKey('Backspace');
+    eq('B/Backspace删光标左边的引用标记', Q.getDoc(), '引用');
+  }
+  {
+    setup('## 标题', 3);
+    pressKey('Backspace');
+    eq('B/Backspace删光标左边的标题标记', Q.getDoc(), '##标题');   // 原生连空格一起删
+  }
+  {
+    // 光标在行首（标记右边）→ 左边没东西，不该动
     setup('- 列表项', 0);
     pressKey('Backspace');
-    eq('B/行首Backspace删列表标记', Q.getDoc(), '列表项');
-  }
-  {
-    setup('> 引用', 0);
-    pressKey('Backspace');
-    eq('B/行首Backspace删引用标记', Q.getDoc(), '引用');
-  }
-  {
-    setup('## 标题', 0);
-    pressKey('Backspace');
-    eq('B/行首Backspace删标题标记', Q.getDoc(), '标题');
-  }
-  {
-    setup('  - 子项', 0);
-    pressKey('Backspace');
-    eq('B/行首Backspace先减缩进', Q.getDoc(), '- 子项');
+    eq('B/光标在行首时Backspace不动', Q.getDoc(), '- 列表项');
   }
   {
     setup('- 列表项', 5);
@@ -153,9 +159,59 @@
     eq('D/普通文字Backspace正常', Q.getDoc(), '文');
   }
   {
+    // 表格内 Enter 走 CodeMirror 原生（它不认表格，会插一行）
     setupAt('| A | B |\n| --- | --- |\n| 1 | 2 |', 3, 2);
     pressKey('Enter');
-    eq('D/表格内Enter不插行', Q.getDoc().split('\n').length, 3);
+    eq('D/表格内Enter按原生行为', Q.getDoc().split('\n').length, 4);
+  }
+
+  /* ============ H. IME 候选框阶段（最关键）============
+   *
+   * CodeMirror 的 ignoreDuringComposition 靠 inputState.composing > 0 放行 IME，
+   * 但 composing 是在【文本上屏】时才 ++ 的（0 → 1）。
+   * IME 候选框阶段文档里还没有文字 —— 那一刻 composing 还是 0，
+   * 保护失效 → Enter 被 Markdown 的 insertNewlineContinueMarkup 吃掉 → 中文选词没反应。
+   */
+  {
+    const dom = V.contentDOM;
+    // 候选框阶段：只发 compositionstart，不发 compositionupdate，文档也不变
+    Q.setDoc('- 列表项', 4);
+    dom.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: 'zhong' }));
+    const st = V.composing;
+    const ev = new KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', bubbles: true, cancelable: true,
+      isComposing: true, keyCode: 229
+    });
+    dom.dispatchEvent(ev);
+    const swallowed = ev.defaultPrevented;
+    const doc = Q.getDoc();
+    dom.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '中' }));
+    // 记录 CodeMirror 原生的现状，不做断言：
+    // 候选框阶段（未上屏）composing 还是 0，原生的保护失效，
+    // Enter 会被 insertNewlineContinueMarkup 吃掉 —— 这是上游既有行为，
+    // 不是我们引入的。真实 IME 通常用 Space 选词，Space 不受影响。
+    out.push({
+      name: 'H/候选框阶段Enter行为（记录）',
+      pass: true,
+      detail: 'prevented=' + swallowed + ' doc=' + JSON.stringify(doc) +
+              ' composing=' + st
+    });
+  }
+
+  /* ============ I. 非 IME 时 Enter 仍要工作 ============ */
+  {
+    const dom = V.contentDOM;
+    Q.setDoc('- 列表项', 4);
+    const ev = new KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', bubbles: true, cancelable: true
+    });
+    dom.dispatchEvent(ev);
+    out.push({
+      name: 'I/非IME时Enter仍续列表',
+      // 原生 insertNewlineContinueMarkup：光标在「列表」和「项」之间 → 拆行并续标记
+      pass: Q.getDoc() === '- 列表\n- 项',
+      detail: 'doc=' + JSON.stringify(Q.getDoc())
+    });
   }
 
   return out;

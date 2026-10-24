@@ -148,6 +148,34 @@ const state = EditorState.create({
 const view = new EditorView({ state, parent: document.getElementById("editor") });
 window.__view = view;
 
+/**
+ * IME（中文输入法）状态跟踪
+ *
+ * 为什么不能只看 view.composing：
+ *   CodeMirror 的 `view.composing` 是 `inputState.composing > 0`，
+ *   而 compositionstart 时它只被设成 **0**（不是 1），
+ *   要等第一次 compositionupdate 才变成 1。
+ *   也就是说「刚开始组合」的那一瞬间 view.composing 是 false。
+ *
+ *   再加上 Chrome 里 CodeMirror 的 compositionPendingKey 机制
+ *   **只在 Safari 生效**（源码 4685 行），所以 Chrome 下 IME 的
+ *   Enter keydown 确实会到达 keymap。
+ *
+ * 所以额外记录【事件上的 isComposing / keyCode 229】——
+ *   keyCode 229 是 IME 的标准标志（所有主流浏览器一致）。
+ *
+ * 漏掉这一层的后果：中文选词按 Enter 被自定义 keymap 抢走 → 中文打不出来。
+ */
+let lastKeyIsComposing = false;
+view.contentDOM.addEventListener('keydown', (e) => {
+  // 捕获阶段 —— 保证比 CodeMirror 自己的处理先跑到
+  lastKeyIsComposing = !!(e.isComposing || e.keyCode === 229);
+}, true);
+// 组合结束后复位（compositionend 之后紧跟的 key 不该再被当成 IME 的）
+view.contentDOM.addEventListener('compositionend', () => {
+  lastKeyIsComposing = false;
+});
+
 /* ============ 状态 ============ */
 let currentPath = null;
 let dirty = false;
@@ -1066,6 +1094,41 @@ function heading(level) {
 }
 
 /**
+ * Markdown 编辑手感（列表续行 / Backspace 取消标记 / 表格跳格）的开关。
+ *
+ * 为什么要有这个开关：
+ *   这些增强是「抢」默认按键行为的（Enter / Backspace / Tab），
+ *   一旦在某种输入场景下出问题（最典型的是中文输入法），
+ *   用户就完全没法编辑了 —— 没有任何办法临时绕过。
+ *
+ *   所以做成运行时可关：菜单「帮助 → Markdown 编辑手感」，
+ *   关掉后立刻回到 CodeMirror 默认行为，不用重启。
+ */
+const MD_KEYMAP_KEY = 'qingmo.mdKeymap.off';
+
+function mdKeymapEnabled() {
+  try { return localStorage.getItem(MD_KEYMAP_KEY) !== '1'; } catch (e) { return true; }
+}
+
+function setMdKeymapEnabled(on) {
+  try {
+    if (on) localStorage.removeItem(MD_KEYMAP_KEY);
+    else localStorage.setItem(MD_KEYMAP_KEY, '1');
+  } catch (e) { /* 隐私模式下写不了，忽略 */ }
+}
+
+// 初始化时暴露（主进程菜单要读，测试也要用）
+window.__mdKeymapEnabled = () => mdKeymapEnabled();
+window.__setMdKeymapEnabled = setMdKeymapEnabled;
+
+// 主进程点菜单 → 切换
+window.api.on('app:setMdKeymap', (_ch, on) => {
+  setMdKeymapEnabled(!!on);
+  toast(on ? '已开启 Markdown 编辑手感' : '已关闭 Markdown 编辑手感（列表续行等不再生效）');
+  logger.info('Markdown 编辑手感已切换', { enabled: !!on });
+});
+
+/**
  * Markdown 编辑手感 —— Enter / Backspace / Tab
  *
  * 之前完全没有这些处理，导致：
@@ -1088,113 +1151,32 @@ function markdownKeymap() {
   }
 
   return [
-    {
-      key: "Enter",
-      run: (v) => {
-        const { sel, docText, lines, lineNo, col } = ctx();
-        // 有选区时按默认行为替换选区
-        if (!sel.empty) return false;
-        const plan = planEnter(lines, lineNo, col);
-        if (!plan) return false;
-
-        if (plan.type === 'split') return false;   // 交给 CodeMirror 默认拆行
-
-        const line = lines[lineNo] || '';
-        const lineObj = view.state.doc.line(lineNo + 1);
-
-        if (plan.type === 'list' || plan.type === 'quote') {
-          // 拆分点不能早于【标记末尾】——
-          // 光标在 '- ' 的空格处时按 Enter，如果就地拆行，
-          // 原来的行会变成 '-'（尾空格被吃掉），
-          // 而 '-' 后面没空格在 Markdown 里就不是列表项了。
-          //   '- 父项\n  - 子项' → '- 父项\n  -\n  - 子项'  ← 坏了
-          const li = parseListItem(line);
-          const markerEnd = li ? li.marker.length : 0;
-          const splitCol = Math.max(col, markerEnd);
-          const after = line.slice(splitCol);
-          const marker = plan.marker;
-          const insert = '\n' + marker + after;
-          view.dispatch({
-            changes: { from: lineObj.from + splitCol, to: lineObj.to, insert },
-            selection: { anchor: lineObj.from + splitCol + 1 + marker.length }
-          });
-          view.focus();
-          return true;
-        }
-
-        if (plan.type === 'end') {
-          // 结束当前块：把这一行的标记去掉，变成普通段落
-          const m = line.match(/^(\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?))/);
-          if (m) {
-            const remove = m[1].length;
-            view.dispatch({
-              changes: { from: lineObj.from, to: lineObj.from + remove, insert: '' },
-              selection: { anchor: lineObj.from }
-            });
-            view.focus();
-            return true;
-          }
-          return false;
-        }
-
-        if (plan.type === 'dedent-list') {
-          // 空的有缩进列表项 → 缩进减一级，标记保留
-          const insert = plan.marker;
-          view.dispatch({
-            changes: { from: lineObj.from, to: lineObj.to, insert },
-            selection: { anchor: lineObj.from + insert.length }
-          });
-          view.focus();
-          return true;
-        }
-
-        if (plan.type === 'table-keep') {
-          // 表格里按 Enter 不插行（Tab 才跳格）
-          return true;
-        }
-        return false;
-      }
-    },
-
-    {
-      key: "Backspace",
-      run: (v) => {
-        const { sel, lines, lineNo, col } = ctx();
-        if (!sel.empty) return false;
-        const plan = planBackspace(lines, lineNo, col);
-        if (!plan) return false;
-        const lineObj = view.state.doc.line(lineNo + 1);
-
-        if (plan.type === 'delete-prefix') {
-          view.dispatch({
-            changes: { from: lineObj.from, to: lineObj.from + plan.remove, insert: '' },
-            selection: { anchor: lineObj.from }
-          });
-          view.focus();
-          return true;
-        }
-
-        if (plan.type === 'outdent') {
-          const m = (lines[lineNo] || '').match(/^(\s+)/);
-          const remove = m ? Math.min(plan.remove, m[1].length) : plan.remove;
-          view.dispatch({
-            changes: { from: lineObj.from, to: lineObj.from + remove, insert: '' },
-            selection: { anchor: lineObj.from }
-          });
-          view.focus();
-          return true;
-        }
-        return false;
-      }
-    },
-
+    // ⚠⚠ 这里【不要】再实现 Enter / Backspace。
+    //
+    // CodeMirror 的 @codemirror/lang-markdown 自带一套 Markdown 专用绑定
+    //   （源码 399-400 行）：
+    //     { key: "Enter",    run: insertNewlineContinueMarkup }
+    //     { key: "Backspace", run: deleteMarkupBackward }
+    //   而且是 Prec.high 优先级 —— 比我这里的普通 keymap 更高，先跑。
+    //
+    // 之前自己又实现了一遍 Enter/Backspace，等于用「自己的粗糙版本」
+    // 去覆盖 CodeMirror 那套经过大量打磨的实现：
+    //   · 它不懂代码块 / HTML 区域（原生会正确地不处理）
+    //   · 拆分点的处理和我不一样
+    //   · 一旦用 Prec.high 去抢，preventDefault 反而会打断 IME 选词
+    //
+    // 所以现在只补 CodeMirror 【没有】的：表格里 Tab 跳格。
+    // Tab 上保留了 IME 检查 —— IME 组合中按 Tab 基本不会发生，
+    // 拦一下的副作用可以忽略，而漏掉的代价是「中文候选框被 Tab 打断」。
     {
       key: "Tab",
       run: (v) => {
+        if (!mdKeymapEnabled()) return false;   // 用户关了 Markdown 手感
+        if (v.composing || lastKeyIsComposing) return false;
         const { sel, docText, lines, lineNo, col } = ctx();
         const plan = planTab(lines, lineNo, col, false);
         if (!plan) {
-          // 非列表、非表格 → 保持原有的缩进行为
+          // 非表格 → 保持原有的缩进行为
           return indentMore(v) || indentLess(v);
         }
         const lineObj = view.state.doc.line(lineNo + 1);
@@ -1216,14 +1198,7 @@ function markdownKeymap() {
           return true;
         }
 
-        if (plan.type === 'indent') {
-          view.dispatch({
-            changes: { from: lineObj.from, insert: plan.insert },
-            selection: { anchor: sel.head + plan.insert.length }
-          });
-          view.focus();
-          return true;
-        }
+        // 列表缩进也交给 CodeMirror 的 indentMore（它懂 Markdown 的缩进规则）
         return indentMore(v) || indentLess(v);
       }
     },
@@ -1231,6 +1206,8 @@ function markdownKeymap() {
     {
       key: "Shift-Tab",
       run: (v) => {
+        if (!mdKeymapEnabled()) return false;   // 用户关了 Markdown 手感
+        if (v.composing || lastKeyIsComposing) return false;
         const { sel, lines, lineNo, col } = ctx();
         const plan = planTab(lines, lineNo, col, true);
         if (!plan) return indentLess(v);
@@ -1241,16 +1218,7 @@ function markdownKeymap() {
           view.focus();
           return true;
         }
-        if (plan.type === 'outdent') {
-          const m = (lines[lineNo] || '').match(/^(\s+)/);
-          const remove = m ? Math.min(plan.remove, m[1].length) : plan.remove;
-          view.dispatch({
-            changes: { from: lineObj.from, to: lineObj.from + remove, insert: '' },
-            selection: { anchor: lineObj.from }
-          });
-          view.focus();
-          return true;
-        }
+        // 升级为父项也交给 CodeMirror 的 indentLess
         return indentLess(v);
       }
     }
